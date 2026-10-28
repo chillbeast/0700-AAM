@@ -23,15 +23,13 @@
 
 namespace mt
 {
-    static juce::AudioSampleBuffer mutedSample{ 2, 1 };
-
     ///
     /// ASound ASliceRenderer
     ///
 
     ASliceRenderer::ASliceRenderer()
     {
-        mutedSample.clear();
+        next.clear();
     }
 
     void ASliceRenderer::setSlice( ASoundSlice* Slice )
@@ -44,10 +42,12 @@ namespace mt
     void ASliceRenderer::reset() noexcept
     {
         inL = inR = nullptr;
-        if( slice && slice->source && slice->getSourceLength() > 0 )
+        source = slice ? slice->getPlaybackSource( sourceRevision ) : nullptr;
+        sourceLength = source ? juce::jmin( source->getNumSamplesPerChannel(), source->getData().getNumSamples() ) : 0;
+        if( sourceLength > 0 )
         {
-            inL = (float*)slice->source->getData().getReadPointer( 0 );
-            inR = (float*)slice->source->getData().getReadPointer( 1 );
+            inL = (float*)source->getData().getReadPointer( 0 );
+            inR = (float*)source->getData().getReadPointer( 1 );
         }
 
         curPos = getStartPosition();
@@ -57,19 +57,20 @@ namespace mt
 
     void ASliceRenderer::start() noexcept
     {
-        finished.store( !( slice && inL && inR && slice->getEnd() > slice->getStart() && slice->getSourceLength() > 0 ) );
+        finished.store( !( slice && inL && inR && slice->getEnd() > slice->getStart() && sourceLength > 0
+            && slice->getSourceRevision() == sourceRevision ) );
     }
 
     void ASliceRenderer::setPosition( double Position )
     {
-        if( !slice || !std::isfinite( Position ) )
+        if( !slice || slice->getSourceRevision() != sourceRevision || !std::isfinite( Position ) )
         {
             curPos = 0.0;
             finished = true;
             return;
         }
 
-        const auto loopEnd   = juce::jlimit( 0.0, slice->getSourceLength(), (double)slice->loopEnd() );
+        const auto loopEnd   = juce::jlimit( 0.0, (double)sourceLength, (double)slice->loopEnd() );
         const auto loopStart = juce::jlimit( 0.0, loopEnd, (double)slice->loopStart() );
         const auto isForward = slice->isForward();
         const auto isLooping = slice->isLooping();
@@ -89,10 +90,15 @@ namespace mt
         }
         else
         {
-            const auto length = loopEnd - loopStart;
-            auto offset = std::fmod( Position - loopStart, length );
-            if( offset < 0.0 ) offset += length;
-            curPos = loopStart + offset;
+            if( Position >= loopStart && Position < loopEnd )
+                curPos = Position;
+            else
+            {
+                const auto length = loopEnd - loopStart;
+                auto offset = std::fmod( Position - loopStart, length );
+                if( offset < 0.0 ) offset += length;
+                curPos = loopStart + offset;
+            }
         }
     }
 
@@ -103,16 +109,17 @@ namespace mt
 
     juce::AudioSampleBuffer& ASliceRenderer::getNext( double PitchRatio )
     {
-        if( finished.load() || !slice || !inL || !inR ) return mutedSample;
-        const int end = juce::jmin( slice->getEnd(), (int)slice->getSourceLength() );
+        if( finished.load() || !slice || !inL || !inR ) return silentFrame();
+        if( slice->getSourceRevision() != sourceRevision ) { finished = true; return silentFrame(); }
+        const int end = juce::jlimit( 0, sourceLength, slice->getEnd() );
         const int begin = juce::jlimit( 0, juce::jmax( 0, end ), slice->getStart() );
-        if( end <= begin ) { finished = true; return mutedSample; }
+        if( end <= begin ) { finished = true; return silentFrame(); }
         curPos = juce::jlimit( (double)begin, std::nextafter((double)end, (double)begin), curPos );
         m0 = juce::jlimit( begin, end - 1, (int)std::floor( curPos ) );
-        m1 = juce::jmin( m0 + 1, end - 1 );
+        m1 = m0 + 1 < end ? m0 + 1 : ( slice->isLooping() ? begin : end - 1 );
         alpha = curPos - m0;
         const bool muted = isMuted() || slice->isMuted();
-        auto& result = muted ? mutedSample : interpolateSample();
+        auto& result = muted ? silentFrame() : interpolateSample();
         step( PitchRatio );
         return result;
     }

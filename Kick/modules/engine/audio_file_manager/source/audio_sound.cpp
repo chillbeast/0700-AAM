@@ -198,19 +198,22 @@ namespace mt
 
     void ASoundSlice::setSource( ASound::Ptr Source, bool ResetLoopPoints )
     {
-        if( source != Source )
+        ASound::Ptr retired;
         {
-            // Binding a saved/copied slice preserves its trim. Only an explicit
-            // source replacement resets the region.
-            if( ResetLoopPoints )
-            {
-                loopStart = 0;
-                loopEnd   = INT_MAX;
-            }
-            // Update source.
+            const juce::SpinLock::ScopedLockType guard( sourceLock );
+            if( source == Source ) return;
+            retired = source; // Release the previous owner outside the snapshot lock.
             source = Source;
-            refresh();
+            sourceRevision.fetch_add( 1, std::memory_order_release );
         }
+        // Binding a saved/copied slice preserves its trim. Only an explicit
+        // source replacement resets the region.
+        if( ResetLoopPoints )
+        {
+            loopStart = 0;
+            loopEnd   = INT_MAX;
+        }
+        refresh();
     }
 
     void ASoundSlice::refresh() noexcept

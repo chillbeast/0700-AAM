@@ -2,9 +2,15 @@
 
 **Review, local repairs and desktop validation completed on 2026-10-27.** See [AUDIT-FIXES.md](AUDIT-FIXES.md) for the implementation, final results, and hardware acceptance limits. The baseline findings below describe the pre-repair revision.
 
+**Community simulator v0.1.2 (2026-10-28):** sample voice/source lifetime fixes, fractional loop seams, mono Modular effects, exact DSP coefficient caching and the release-review live audition race repair are documented at the end of `AUDIT-FIXES.md`. See [RELEASE-NOTES.md](RELEASE-NOTES.md) for the vector panel, validation and remaining limits. The preceding audit build is [v0.1.1](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.1) at `e5f5ea8c`.
+
 **Original review handoff:** The completed findings, verification results, corrections to this original handoff, and repair priorities are in [AUDIT-REVIEW.md](AUDIT-REVIEW.md). The review was read-only; the subsequent repair pass changes production source and tests and is documented with its commit on `desktop-build`.
 
 The completed pass adds 30 findings to the 32 listed here. Eleven findings were reproduced against unchanged engine objects, including three AddressSanitizer memory errors. The existing Debug and ASan suites each passed 196/196, and both simulator self-tests completed successfully. Those baseline passes do not cover the new failure paths. Use the completed report's reconciliation table before implementing any inherited finding.
+
+**Functionality inventory (2026-10-28):** [FEATURE-INVENTORY.md](FEATURE-INVENTORY.md) is the current capability/gap ledger. It reconciles the older manual, maps every panel command and screen ID, indexes UI handlers, records state/acceptance requirements, and distinguishes regression coverage from feature completion. Its inventory-driven preview regression fix is tracked with O5.
+
+**Simulator panel:** the supplied `kick-flat.png` is reconstructed as an embedded SVG with 57 named layout regions. Hardware is the default layout; the toolbar retains Original as a saved preference. Both layouts reuse the same controls, native 1024 x 600 screen, firmware packets and LED state. See [artwork notes](Kick/apps/kickem/artwork/README.md) for regeneration and tests. Release panel checks pass 227/227 for default layout, preference restart and Original override, including switching with an open dialog. Popup, Audio, instrument and Modular checks also pass. MASTER/REC remain analog visual references. The source and downloadable Windows build are associated with [community v0.1.2](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.2); follow the release guide's public asset/hash verification when publishing.
 
 ## Project and rules
 
@@ -35,9 +41,9 @@ Run the builds from PowerShell; Git Bash mangles MSBuild `/flags`.
 
 - **Engine tests:** run `cmake --build Kick/build/win --config Debug --target KickEngineTest --parallel`, then run the exe.
   - It writes `engine_test_results.txt` next to the exe, and the exit code is the number of failures.
-  - The repaired suite currently passes 243/243 in Debug and ASan. The original 196-check baseline and pre-repair memory-error evidence are preserved in the review; use the permanent audit regressions for the current tree.
+  - The v0.1.2 suite passes 264/264 in Debug and ASan (243 audit-repair checks plus 21 optimization/release regressions). The original 196-check baseline and pre-repair memory-error evidence are preserved in the review; use the permanent regressions for the current tree.
 - **Simulator self-tests:**
-  - Set `KICKEM_SELFTEST=1|instrument|audio|tour|modular`.
+  - Set `KICKEM_SELFTEST=1|audit|instrument|audio|tour|modular|panel|panel-preference|popup`.
   - Add `KICKEM_LOG=<file>` to write a log.
   - Self-tests use a temp prefs copy, so they never touch the user's prefs.
 - **ASan:**
@@ -204,8 +210,8 @@ Modular files live in `engine/audio_program/instrument/modular/`, abbreviated `m
 
 ## Current follow-up
 
-The repair implementation and desktop checks are tracked in [AUDIT-FIXES.md](AUDIT-FIXES.md), including the additional H9 graph race found during sanitizer validation. Debug and ASan each pass 243 checks. The simulator audit mode passes five shared UI lifetime/empty-state checks; instrument and Modular self-tests both complete with exit 0.
+The repair implementation and desktop checks are tracked in [AUDIT-FIXES.md](AUDIT-FIXES.md), including H9 and optimization round 2 (O1-O5). Debug and ASan each pass 258 checks; Release passes 15 optimization checks. The inventory-discovered preview lifecycle regression is fixed and its separate ASan probe exits 0. The simulator rebuild succeeds; the prior round-2 audit/instrument/Modular smoke results remain historical coverage.
 
 Remaining acceptance requires the physical device: MCU acknowledgement/timeout flow, firmware transfer through USB, UART fragmentation on the real transport, CV calibration output, and ARM audio deadlines. A12 remains a profiling candidate; accurate DSP functions were retained. Linux multiprocess recovery stress was outside this desktop pass.
 
-The portable audit subset is available with `KICK_TEST_AUDIT_ONLY=1`; ordinary `KickEngineTest` runs the complete suite. Simulator modes include `audit`, `instrument`, and `modular`. Use isolated preferences and run suites serially. Preserve the publishing restrictions above: only push to `fork` when requested and package distributable builds from `Kick/build/dist` without ASIO or personal/commercial content.
+The portable audit subset (59 checks including optimization regressions) is available with `KICK_TEST_AUDIT_ONLY=1`; `KICK_TEST_OPTIMIZE_ONLY=1` runs the 15 new checks, and `KICK_TEST_DSP_BENCH=1` adds warmed module timing measurements. Ordinary `KickEngineTest` runs the complete suite. Simulator modes include `audit`, `instrument`, and `modular`. Use isolated preferences and run suites serially. Preserve the publishing restrictions above: only push to `fork` when requested and package distributable builds from `Kick/build/dist` without ASIO or personal/commercial content.

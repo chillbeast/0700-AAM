@@ -40,25 +40,27 @@ namespace mt
 
     ASoundPlayer::~ASoundPlayer()
     {
-        ASliceRenderer::stop();
+        // The renderer owns a source snapshot: release it while our embedded
+        // sound is still alive, before member and then base destruction.
+        ASliceRenderer::setSlice( nullptr );
         slice.setSource( nullptr );
         sound.decReferenceCountWithoutDeleting();
     }
 
     void ASoundPlayer::setSoundToPlay( const juce::String& File, double LengthInSeconds )
     {
-        ASliceRenderer::stop();
+        ASliceRenderer::setSlice( nullptr );
         sound.setSound( File, LengthInSeconds );
 
         slice.refresh();
         slice.setLoopPoints( 0, sound.getNumSamplesPerChannel() );
 
-        ASliceRenderer::reset();
+        ASliceRenderer::setSlice( &slice );
     }
 
     void ASoundPlayer::removeSound()
     {
-        ASliceRenderer::stop();
+        ASliceRenderer::setSlice( nullptr );
 
         // ASound::purge() only frees the data when nothing references it, so
         // detach the slice and drop our own reference around the purge.
@@ -67,7 +69,8 @@ namespace mt
         sound.purge();
         sound.incReferenceCount();
 
-        // Stay attached: setSoundToPlay() refreshes the slice but never re-sets its source.
+        // Keep the slice bound, but leave the renderer detached so purging does
+        // not immediately reload the data. The next load binds its new snapshot.
         slice.setSource( &sound );
     }
 

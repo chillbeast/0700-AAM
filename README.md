@@ -1,3 +1,5 @@
+> There is no official hardware, and the manufacturer's repository is incomplete, so I've had to fill in the gaps. Nothing here is official; I'm doing this for fun. — lc
+
 <p align="center">
   <img src="docs/images/social-preview.png" alt="Behringer KICK (BE 0700-AAM)" width="100%">
 </p>
@@ -16,9 +18,13 @@ Source code for the Behringer KICK.
 >   - 22 presets, and saving your own.
 > - **Recording pads** into sequences, and REC on the Sampler.
 > - **Real CPU and RAM meters**, plus many crash and UI fixes.
+> - **A vector hardware panel**, with live controls and LEDs, plus a saved **Hardware / Original** layout toggle. See the [simulator preview](docs/images/simulator-panel-v0.1.2.png) and [editable SVG](Kick/apps/kickem/artwork/kick-panel.svg).
+> - **Sample playback and DSP fixes**, including loop-boundary interpolation, source lifetime handling and exact coefficient caching.
 >
-> - **Try it:** download the simulator zip from [Releases](https://github.com/chillbeast/0700-AAM/releases) (Windows x64). Unzip it anywhere and run `KT_KickEM.exe`.
+> - **Try it:** download [community v0.1.2](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.2) (Windows x64). Extract the entire zip and run `KT_KickEM.exe` alongside its assets, templates and demos. The Windows package does not include ASIO, personal preferences or commercial sample libraries. Older builds remain under [Releases](https://github.com/chillbeast/0700-AAM/releases).
 > - **Manual:** [Kick/docs/manual/USER_MANUAL.md](Kick/docs/manual/USER_MANUAL.md) covers the panel, the screens and the Modular engine.
+> - **Known gaps:** [FEATURE-INVENTORY.md](FEATURE-INVENTORY.md) records implemented, partial, missing and unverified capabilities. Opening a screen or lighting a panel button does not mean the underlying feature is complete. Hardware update, CV, USB/UART and ARM timing acceptance remain pending.
+> - **Release changes and checks:** [RELEASE-NOTES.md](RELEASE-NOTES.md).
 > - **Build it:** with Visual Studio 2022 and CMake, from `Kick/`:
 >   `cmake -S . -B build/sim -G "Visual Studio 17 2022" -A x64 -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF`, then
 >   `cmake --build build/sim --config Release --target KT_KickEM`
@@ -28,7 +34,9 @@ Source code for the Behringer KICK.
   <img src="docs/images/kick-front.webp" alt="Behringer KICK" width="720">
 </p>
 
-## Key features
+## Original product specification
+
+The renders and specification below describe the intended hardware. They are not a list of completed or hardware-verified features in this community build; use the manual and inventory for implementation status.
 
 - AI camera for gesture control
 - Touchscreen

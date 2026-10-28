@@ -3,6 +3,7 @@
 #include <map>
 #include "kick_SimulatorControls.h"
 #include "kick_SimulatorMainControl.h"
+#include "kick_PanelArtwork.h"
 
 namespace sim
 {
@@ -22,6 +23,8 @@ namespace sim
 
         void paint( juce::Graphics& g ) override;
         void resized() override;
+        void setHardwareLayout(bool enabled);
+        bool isHardwareLayout() const { return hardwareLayout; }
 
     private:
         /// Packets the app sent to the "hardware" (LEDs, pads, slider).
@@ -48,12 +51,15 @@ namespace sim
         /// KICKEM_SELFTEST=modular: open the Modular patch editor, add/move/modulate modules
         /// through its controls and the Q-links, undo, and snapshot each step.
         void startModularTest();
+        void startPanelTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };
         std::unique_ptr<juce::Component>   popupTestContent;
 
         juce::Component& screen;
+        PanelArtwork artwork;
+        bool hardwareLayout { false };
 
         // Left column
         SimTouchSlider slider;
@@ -91,9 +97,17 @@ namespace sim
         Simulator();
         void paint( juce::Graphics& g ) override;
         void resized() override;
+        void setHardwareLayout(bool enabled, bool persist = true);
+        bool isHardwareLayout() const { return board.isHardwareLayout(); }
+        juce::Point<int> preferredSize() const;
+        std::function<void()> onLayoutChanged;
 
     private:
         SimulatorBoard board;
+        SimButton hardwareButton { "HARDWARE", DCC::EN_INVALID_ID };
+        SimButton originalButton { "ORIGINAL", DCC::EN_INVALID_ID };
+        juce::TooltipWindow tooltips { this, 650 };
+        static constexpr int toolbarHeight = 44;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( Simulator )
     };
 }

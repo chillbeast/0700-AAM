@@ -90,6 +90,11 @@ namespace sim
 
     void SimulatorBoard::startSelfTest()
     {
+        if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("panel"))
+        {
+            startPanelTest();
+            return;
+        }
         auto& s     = selfTestSteps;
         auto  note  = [&s]( juce::String text ) { s.push_back( [text] { SimulatorInterfaceImpl::log( "SELFTEST " + text ); } ); };
         auto  wait  = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
@@ -933,12 +938,12 @@ namespace sim
         wait( 4 );
         s.push_back( [log] {
             auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
-            auto source = exeDir.getChildFile( "projects/Vintage Soul Kit" );
+            auto source = exeDir.getChildFile( "templates/Template 01" );
             auto root   = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_popup" );
             root.deleteRecursively();
             auto scratch = root.getChildFile( source.getFileName() );
             const bool ok = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
-            log( juce::String( "loaded scratch kit" ) + ( ok ? "" : " (FAILED)" ) );
+            log( juce::String( "loaded scratch template" ) + ( ok ? "" : " (FAILED)" ) );
         } );
         wait( 8 );
         click( DCC::EN_MAINMODE ); // the Main screen's track row has list boxes (I/P MIDI PORT, channel)
@@ -1321,6 +1326,180 @@ namespace sim
         startTimer( 400 );
     }
 
+    void SimulatorBoard::startPanelTest()
+    {
+        auto failures = std::make_shared<int>(0);
+        auto check = [failures](bool ok, const juce::String& what) {
+            if(!ok) ++*failures;
+            SimulatorInterfaceImpl::log("SELFTEST " + juce::String(ok ? "PASS " : "FAIL ") + what);
+        };
+        auto& steps = selfTestSteps;
+        steps.push_back([] {}); // wait for the wrapper and window to finish construction
+        steps.push_back([this, check] {
+            const auto mode = juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {});
+            const auto overrideLayout = juce::SystemStats::getEnvironmentVariable("KICKEM_LAYOUT", {});
+            const bool saved = mt::getSettings().getState().getChildWithName("SIMULATOR").getProperty("hardwarePanel", true);
+            const bool expected = mode == "panel-preference" ? false : overrideLayout == "hardware" ? true : overrideLayout == "original" ? false : saved;
+            check(isHardwareLayout() == expected, "startup layout / saved preference / environment override");
+            check(artwork.isValid(), "embedded SVG and all 57 named regions load");
+        });
+        steps.push_back([check] {
+            const auto source = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile("templates/Template 01");
+            auto scratch = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("kickem_panel", "", false).getChildFile("Template 01");
+            check(source.copyDirectoryTo(scratch) && mt::getAudioInterface().loadProject(scratch), "load scratch project for live-screen checks");
+        });
+        for(int i = 0; i < 10; ++i) steps.push_back([] {});
+        steps.push_back([this] { findButton(DCC::EN_MAINMODE)->press(true); findButton(DCC::EN_MAINMODE)->press(false); });
+        for(int i = 0; i < 4; ++i) steps.push_back([] {});
+        for(bool hardware : {true, false, true})
+        {
+            steps.push_back([this, check, hardware] {
+                auto* wrapper = findParentComponentOfClass<Simulator>();
+                check(wrapper != nullptr, "simulator wrapper exists");
+                if(!wrapper) return;
+                auto& engine = mt::getAudioInterface();
+                const std::array<int, 3> selection {engine.getSelectedSequence(), engine.getSelectedTrack(), engine.getSelectedProgram()};
+                // Exercise the actual toolbar handlers, including persistence and window resizing.
+                bool clicked = false;
+                for(auto* child : wrapper->getChildren())
+                    if(auto* button = dynamic_cast<SimButton*>(child))
+                        if(button->getTooltip() == (hardware ? "Use the hardware panel layout" : "Use the original wide simulator layout"))
+                        {
+                            button->press(true);
+                            button->press(false);
+                            clicked = true;
+                        }
+                check(clicked && isHardwareLayout() == hardware, "toolbar switches to " + juce::String(hardware ? "hardware" : "original"));
+                check(engine.isProjectLoaded() && selection == std::array<int, 3>{engine.getSelectedSequence(), engine.getSelectedTrack(), engine.getSelectedProgram()},
+                    "loaded project and selected sequence / track / program survive layout switch");
+                check(screen.getWidth() == 1024 && screen.getHeight() == 600, "firmware screen retains native resolution");
+                check(getLocalArea(&screen, screen.getLocalBounds()) == (hardware ? artwork.bounds("screen") : screenRect), "screen occupies the correct aperture");
+
+                auto reachable = [this](juce::Component& control, juce::Point<int> local) {
+                    auto* target = getComponentAt(getLocalPoint(&control, local));
+                    return target == &control;
+                };
+                for(int i = 0; i < 16; ++i)
+                {
+                    auto& pad = pads.getPad(i);
+                    check(reachable(pad, pad.getLocalBounds().getCentre()), "pad " + juce::String(i + 1) + " receives clicks");
+                    if(hardware) check(getLocalArea(&pad, pad.getLocalBounds()) == artwork.bounds("pad-" + juce::String(i)), "pad numbering follows hardware");
+                }
+                std::vector<SimButton*> buttons {&fullLevelBtn, &levels16Btn, &eraseBtn, &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn};
+                mainControl.collectButtons(buttons);
+                for(auto* button : buttons)
+                {
+                    auto point = button->getLocalBounds().getCentre();
+                    if(hardware)
+                    {
+                        const int code = button->getCode();
+                        if(code == DCC::EN_BACK) point = {6, 6};
+                        if(code == DCC::EN_COPY) point = {button->getWidth() - 6, 6};
+                        if(code == DCC::EN_MINUS) point = {6, button->getHeight() - 6};
+                        if(code == DCC::EN_PLUS) point = {button->getWidth() - 6, button->getHeight() - 6};
+                    }
+                    check(reachable(*button, point), "button " + button->getTooltip() + " receives clicks");
+                }
+                for(auto& knob : qlinks) check(reachable(*knob, knob->getLocalBounds().getCentre()), "Q-link receives clicks");
+                check(reachable(mainControl.getJog(), mainControl.getJog().getLocalBounds().getCentre()), "jog centre receives clicks");
+                check(reachable(slider, slider.getLocalBounds().getCentre()), "touch strip receives clicks");
+            });
+            steps.push_back([this, check, hardware] {
+                auto* wrapper = findParentComponentOfClass<Simulator>();
+                if(!wrapper) return;
+                // Hit-test in window coordinates too: covers both layers of screen/panel scaling.
+                auto* top = getTopLevelComponent();
+                const auto point = top->getLocalPoint(&pads.getPad(0), pads.getPad(0).getLocalBounds().getCentre());
+                check(top->getComponentAt(point) == &pads.getPad(0), "scaled window click reaches pad 1");
+                const auto path = juce::SystemStats::getEnvironmentVariable("KICKEM_SHOT", {});
+                if(path.isNotEmpty())
+                {
+                    const auto file = juce::File(path).getChildFile(hardware ? "hardware-panel.png" : "original-panel.png");
+                    if(auto output = file.createOutputStream())
+                        check(juce::PNGImageFormat().writeImageToStream(wrapper->createComponentSnapshot(wrapper->getLocalBounds()), *output), "panel screenshot saved");
+                }
+            });
+        }
+        steps.push_back([this, check] {
+            std::vector<CPktMgr::HWMsg_t> packets;
+            sigslot::scoped_connection capture = Controls::InputEvents::dispatchHardwareEvent.connect([&packets](CPktMgr::HWMsg_t& msg) { packets.push_back(msg); });
+            ShiftLatch::setLatched(false);
+            packets.clear();
+            mainControl.getShiftButton().press(true);
+            mainControl.getShiftButton().press(false);
+            findButton(DCC::EN_BANK_A)->press(true);
+            findButton(DCC::EN_BANK_A)->press(false);
+            check(packets.size() == 4 && packets[0].data == hw::buttonMessage(DCC::EN_SHIFT, DCC::BTN_PRESSED).data
+                && packets[1].data == hw::buttonMessage(DCC::EN_BANK_E, DCC::BTN_PRESSED).data
+                && packets[2].data == hw::buttonMessage(DCC::EN_BANK_E, DCC::BTN_RELEASED).data
+                && packets[3].data == hw::buttonMessage(DCC::EN_SHIFT, DCC::BTN_RELEASED).data, "Shift bank E press/release enters firmware input path");
+            packets.clear();
+            pads.getPad(0).hit(true, 96);
+            pads.getPad(0).press(72);
+            pads.getPad(0).hit(false);
+            check(packets.size() == 3 && packets[0].data == hw::padMessage(0, DCC::BTN_PRESSED, 96).data
+                && packets[1].data == hw::padMessage(0, DCC::BTN_LONGPRESSED, 96, 72).data
+                && packets[2].data == hw::padMessage(0, DCC::BTN_RELEASED, 0).data, "pad velocity / pressure / release enter firmware input path");
+            packets.clear();
+            qlinks[0]->turn(2);
+            mainControl.getJog().turn(-3);
+            mainControl.getJog().pushCentre(true);
+            mainControl.getJog().pushCentre(false);
+            slider.setTouch(37);
+            check(packets.size() == 5 && packets[0].data == hw::knobMessage(DCC::EN_KNOB_1, 2).data
+                && packets[1].data == hw::knobMessage(DCC::EN_KNOB_CENTER, -3).data
+                && packets[2].data == hw::buttonMessage(DCC::EN_KNOB_ENTER, DCC::BTN_PRESSED).data
+                && packets[3].data == hw::buttonMessage(DCC::EN_KNOB_ENTER, DCC::BTN_RELEASED).data
+                && packets[4].data == hw::sliderMessage(37).data, "Q-link / jog / Enter / touch strip enter firmware input path");
+        });
+        steps.push_back([this, check] {
+            auto* wrapper = findParentComponentOfClass<Simulator>();
+            auto* originalScreen = &screen;
+            auto* originalPad = &pads.getPad(0);
+            const auto screenChildren = screen.getChildren();
+            auto* button = findButton(DCC::EN_LINK);
+            button->setLed(true);
+            ShiftLatch::setLatched(true);
+            wrapper->setHardwareLayout(false);
+            wrapper->setHardwareLayout(true);
+            check(button->isLedOn() && ShiftLatch::isLatched() && mainControl.getShiftButton().isLedOn(), "LEDs and latched Shift survive layout changes");
+            check(&screen == originalScreen && &pads.getPad(0) == originalPad && screen.getChildren() == screenChildren, "layout changes retain screen and control instances");
+            ShiftLatch::setLatched(false);
+            wrapper->setHardwareLayout(false); // verified by a second process using panel-preference
+        });
+        steps.push_back([this] {
+            auto list = std::make_unique<ui::KickList>("Layout switch", std::vector<juce::String>{"One", "Two"});
+            list->show("LAYOUT SWITCH");
+            popupTestContent = std::move(list);
+        });
+        steps.push_back([this, check] {
+            auto* wrapper = findParentComponentOfClass<Simulator>();
+            auto* modal = juce::Component::getCurrentlyModalComponent();
+            check(wrapper && modal, "open a dialog before changing layouts");
+            if(!wrapper || !modal) return;
+            auto* top = getTopLevelComponent();
+            for(bool hardware : {true, false})
+            {
+                wrapper->setHardwareLayout(hardware);
+                check(juce::Component::getCurrentlyModalComponent() == modal, "layout switch retains the open dialog");
+                check(top->getLocalArea(modal, modal->getLocalBounds()) == top->getLocalArea(&screen, screen.getLocalBounds()),
+                    "open dialog follows the screen aperture through layout changes");
+                bool allowed = true;
+                for(auto* child : wrapper->getChildren())
+                    if(dynamic_cast<SimButton*>(child)) allowed &= modal->canModalEventBeSentToComponent(child);
+                check(allowed, "layout toolbar remains usable with a dialog open");
+            }
+            modal->exitModalState(0);
+        });
+        steps.push_back([] {});
+        steps.push_back([failures] {
+            SimulatorInterfaceImpl::log("SELFTEST panel done: " + juce::String(*failures) + " failures");
+            juce::JUCEApplication::getInstance()->setApplicationReturnValue(*failures);
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        });
+        startTimer(250);
+    }
+
     void SimulatorBoard::timerCallback()
     {
         if( selfTestIndex < selfTestSteps.size() )
@@ -1396,6 +1575,15 @@ namespace sim
 
     void SimulatorBoard::paint( juce::Graphics& g )
     {
+        if(hardwareLayout)
+        {
+            artwork.draw(g);
+            // KickHome has transparent areas. Cover the SVG's standalone boot graphic
+            // before the live screen paints, just as the physical LCD replaces it.
+            g.setColour(juce::Colours::black);
+            g.fillRect(artwork.bounds("screen"));
+            return;
+        }
         g.fillAll( palette::body );
 
         // Brand
@@ -1426,6 +1614,30 @@ namespace sim
 
     void SimulatorBoard::resized()
     {
+        screen.setTransform({});
+        if(hardwareLayout)
+        {
+            const auto aperture = artwork.bounds("screen");
+            screen.setBounds(0, 0, 1024, 600);
+            screen.setTransform(juce::AffineTransform::scale(aperture.getWidth() / 1024.f, aperture.getHeight() / 600.f)
+                                .translated((float)aperture.getX(), (float)aperture.getY()));
+            slider.setBounds(artwork.bounds("slider"));
+            masterKnob.setBounds(artwork.bounds("master"));
+            recKnob.setBounds(artwork.bounds("rec-gain"));
+            fullLevelBtn.setBounds(artwork.bounds("full-level"));
+            levels16Btn.setBounds(artwork.bounds("16-levels"));
+            eraseBtn.setBounds(artwork.bounds("erase"));
+            pads.setBounds(artwork.bounds("pads"));
+            mainControl.setBounds(getLocalBounds());
+            for(int i = 0; i < 4; ++i) qlinks[i]->setBounds(artwork.bounds("p" + juce::String(i + 1)));
+            linkBtn.setBounds(artwork.bounds("link"));
+            recBtn.setBounds(artwork.bounds("record"));
+            overdubBtn.setBounds(artwork.bounds("overdub"));
+            stopBtn.setBounds(artwork.bounds("stop"));
+            playBtn.setBounds(artwork.bounds("play"));
+            playStartBtn.setBounds(artwork.bounds("play-start"));
+            return;
+        }
         screen.setBounds( screenRect );
 
         slider.setBounds( 30, 78, 80, 296 );
@@ -1453,24 +1665,80 @@ namespace sim
     //==============================================================================
     // Simulator (scaling wrapper)
     //==============================================================================
+    void SimulatorBoard::setHardwareLayout(bool enabled)
+    {
+        hardwareLayout = enabled && artwork.isValid();
+        mainControl.setPanelArtwork(hardwareLayout ? &artwork : nullptr);
+        pads.setPanelArtwork(hardwareLayout ? &artwork : nullptr);
+        for(const auto& item : ledMap) item.second->setHardwareSkin(hardwareLayout);
+        for(auto* b : {&recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn})
+            b->setHardwareSkin(hardwareLayout, true);
+        slider.setHardwareSkin(hardwareLayout);
+        masterKnob.setHardwareSkin(hardwareLayout);
+        recKnob.setHardwareSkin(hardwareLayout);
+        for(auto& q : qlinks) q->setHardwareSkin(hardwareLayout);
+        setSize(hardwareLayout ? PanelArtwork::width : boardWidth, hardwareLayout ? PanelArtwork::height : boardHeight);
+        resized();
+        repaint();
+    }
+
     Simulator::Simulator()
     {
         addAndMakeVisible( board );
-        setSize( SimulatorBoard::boardWidth, SimulatorBoard::boardHeight );
+        addAndMakeVisible(hardwareButton);
+        addAndMakeVisible(originalButton);
+        hardwareButton.onPress = [this](bool down) { if(!down) setHardwareLayout(true); };
+        originalButton.onPress = [this](bool down) { if(!down) setHardwareLayout(false); };
+        hardwareButton.setTooltip("Use the hardware panel layout");
+        originalButton.setTooltip("Use the original wide simulator layout");
+        auto state = mt::getSettings().getState().getOrCreateChildWithName("SIMULATOR", nullptr);
+        bool hardware = state.getProperty("hardwarePanel", true);
+        const auto overrideLayout = juce::SystemStats::getEnvironmentVariable("KICKEM_LAYOUT", {});
+        if(overrideLayout == "hardware" || overrideLayout == "original") hardware = overrideLayout == "hardware";
+        setHardwareLayout(hardware, false);
+        const auto size = preferredSize();
+        setSize(size.x, size.y);
+    }
+
+    juce::Point<int> Simulator::preferredSize() const
+    {
+        return {board.getWidth(), board.getHeight() + toolbarHeight};
+    }
+
+    void Simulator::setHardwareLayout(bool enabled, bool persist)
+    {
+        const bool previous = board.isHardwareLayout();
+        board.setHardwareLayout(enabled);
+        hardwareButton.setLed(board.isHardwareLayout());
+        originalButton.setLed(!board.isHardwareLayout());
+        if(persist)
+        {
+            mt::getSettings().getState().getOrCreateChildWithName("SIMULATOR", nullptr)
+                .setProperty("hardwarePanel", board.isHardwareLayout(), nullptr);
+            mt::getSettings().save();
+        }
+        resized();
+        if(onLayoutChanged && board.isHardwareLayout() != previous) onLayoutChanged();
     }
 
     void Simulator::paint( juce::Graphics& g )
     {
         g.fillAll( juce::Colour( 0xff202020 ) );
+        g.setColour(juce::Colour(0xff151618));
+        g.fillRect(0, 0, getWidth(), toolbarHeight);
+        g.setColour(palette::text);
+        g.setFont(juce::Font(14.f, juce::Font::bold));
+        g.drawText("KICK SIMULATOR", 14, 0, juce::jmax(0, getWidth() - 264), toolbarHeight, juce::Justification::centredLeft);
     }
 
     void Simulator::resized()
     {
-        const float bw    = (float)SimulatorBoard::boardWidth;
-        const float bh    = (float)SimulatorBoard::boardHeight;
-        const float scale = juce::jmax( 0.1f, juce::jmin( getWidth() / bw, getHeight() / bh ) );
-
-        board.setBounds( 0, 0, SimulatorBoard::boardWidth, SimulatorBoard::boardHeight );
-        board.setTransform( juce::AffineTransform::scale( scale ).translated( ( getWidth() - bw * scale ) * 0.5f, ( getHeight() - bh * scale ) * 0.5f ) );
+        hardwareButton.setBounds(getWidth() - 246, 7, 112, 30);
+        originalButton.setBounds(getWidth() - 126, 7, 112, 30);
+        const float bw = (float)board.getWidth(), bh = (float)board.getHeight();
+        const float availableHeight = (float)juce::jmax(1, getHeight() - toolbarHeight);
+        const float scale = juce::jmax(0.01f, juce::jmin(getWidth() / bw, availableHeight / bh));
+        board.setTransform(juce::AffineTransform::scale(scale).translated((getWidth() - bw * scale) * 0.5f,
+                           toolbarHeight + (availableHeight - bh * scale) * 0.5f));
     }
 }

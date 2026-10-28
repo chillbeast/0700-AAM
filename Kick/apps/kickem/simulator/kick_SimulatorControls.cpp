@@ -1,5 +1,6 @@
 #include <kick_ui/kick_ui.h>
 #include "kick_SimulatorControls.h"
+#include "kick_PanelArtwork.h"
 #include "kick_SimulatorInterfaceImpl.h"
 
 namespace sim
@@ -81,6 +82,7 @@ namespace sim
         setMouseClickGrabsKeyboardFocus( false );
         setWantsKeyboardFocus( false );
         setRepaintsOnMouseActivity( true );
+        setTooltip(label + (shiftLabel.isNotEmpty() ? " / Shift: " + shiftLabel : juce::String()));
     }
 
     void SimButton::setLed( bool on )
@@ -95,6 +97,18 @@ namespace sim
     void SimButton::paint( juce::Graphics& g )
     {
         auto b = getLocalBounds().toFloat().reduced( 1.5f );
+        if(hardwareSkin)
+        {
+            const auto colour = led ? ledColour : juce::Colours::white;
+            g.setColour(colour.withAlpha(down ? 0.3f : (isMouseOver() ? 0.12f : 0.f)));
+            if(roundHardware) g.fillEllipse(b); else g.fillRoundedRectangle(b, 2.f);
+            if(led || down)
+            {
+                g.setColour(colour.withAlpha(led ? 0.9f : 0.5f));
+                if(roundHardware) g.drawEllipse(b, 2.5f); else g.drawRoundedRectangle(b, 2.f, 2.5f);
+            }
+            return;
+        }
         g.setColour( down ? palette::keyDown : ( isMouseOver() ? palette::key.brighter( 0.08f ) : palette::key ) );
         g.fillRoundedRectangle( b, 5.0f );
         g.setColour( led ? ledColour : palette::outline );
@@ -186,6 +200,9 @@ namespace sim
     {
         setMouseClickGrabsKeyboardFocus( false );
         setWantsKeyboardFocus( false );
+        setTooltip(mode == Mode::absolute ? label + ": analog gain on the hardware; visual reference in the simulator"
+            : label.isNotEmpty() ? label + ": drag vertically or scroll to turn"
+            : "Jog: drag around the wheel or scroll to turn; click centre for Enter");
         if( mode == Mode::absolute )
             angle = -135.0 + value * 270.0;
     }
@@ -193,6 +210,7 @@ namespace sim
     juce::Rectangle<float> SimKnob::knobArea() const
     {
         auto b    = getLocalBounds().toFloat();
+        if(hardwareSkin) return b.reduced(2.f);
         auto text = label.isNotEmpty() ? juce::jmin( 20.0f, b.getHeight() * 0.18f ) : 0.0f;
         b.removeFromBottom( text );
         auto side = juce::jmin( b.getWidth(), b.getHeight() ) - 6.0f;
@@ -205,11 +223,35 @@ namespace sim
         return onCentrePress && p.getDistanceFrom( k.getCentre() ) < k.getWidth() * 0.2f;
     }
 
+    bool SimKnob::hitTest(int x, int y)
+    {
+        if(!hardwareSkin) return true;
+        const auto k = knobArea();
+        return juce::Point<float>((float)x, (float)y).getDistanceFrom(k.getCentre()) <= k.getWidth() * 0.5f;
+    }
+
     void SimKnob::paint( juce::Graphics& g )
     {
         auto k = knobArea();
         auto c = k.getCentre();
         auto r = k.getWidth() * 0.5f;
+
+        if(hardwareSkin)
+        {
+            const auto a = juce::degreesToRadians((float)angle);
+            g.setColour(juce::Colours::white.withAlpha(0.85f));
+            g.drawLine({c.getPointOnCircumference(r * 0.65f, a), c.getPointOnCircumference(r * 0.91f, a)}, 2.5f);
+            if(onCentrePress)
+            {
+                const auto cap = juce::Rectangle<float>(r * 0.6f, r * 0.6f).withCentre(c);
+                g.setColour(centrePressed ? palette::led : juce::Colour(0xff19191b));
+                g.fillEllipse(cap);
+                g.setColour(palette::text);
+                g.setFont(juce::Font(10.f, juce::Font::bold));
+                g.drawText("ENTER", cap.expanded(5.f, 0.f), juce::Justification::centred);
+            }
+            return;
+        }
 
         if( mode == Mode::absolute )
         {
@@ -342,6 +384,7 @@ namespace sim
     SimPad::SimPad( int i )
         : index( i )
     {
+        setTooltip("Pad " + juce::String(i + 1) + ": click higher for more velocity; drag up for pressure");
         setMouseClickGrabsKeyboardFocus( false );
         setWantsKeyboardFocus( false );
     }
@@ -359,6 +402,18 @@ namespace sim
     void SimPad::paint( juce::Graphics& g )
     {
         auto b = getLocalBounds().toFloat().reduced( 2.0f );
+        if(hardwareSkin)
+        {
+            if(lit || down)
+            {
+                const auto c = lit ? colour : juce::Colours::white;
+                g.setColour(c.withAlpha(down ? 0.5f : 0.24f));
+                g.fillRoundedRectangle(b, 3.f);
+                g.setColour(c.withAlpha(0.9f));
+                g.drawRoundedRectangle(b, 3.f, down ? 4.f : 2.f);
+            }
+            return;
+        }
         g.setColour( juce::Colour( 0xff222222 ) );
         g.fillRoundedRectangle( b, 6.0f );
 
@@ -444,6 +499,7 @@ namespace sim
 
     void SimPadGrid::paint( juce::Graphics& g )
     {
+        if(artwork) return;
         g.setColour( palette::well );
         g.fillRoundedRectangle( getLocalBounds().toFloat(), 8.0f );
         g.setColour( palette::text );
@@ -453,6 +509,13 @@ namespace sim
 
     void SimPadGrid::resized()
     {
+        if(artwork)
+        {
+            const auto origin = artwork->bounds("pads").getPosition();
+            for(int i = 0; i < 16; ++i)
+                pads[i]->setBounds(artwork->bounds("pad-" + juce::String(i)).translated(-origin.x, -origin.y));
+            return;
+        }
         auto area = getLocalBounds().reduced( 10 );
         area.removeFromTop( 26 );
         const int gap = 10;
@@ -472,6 +535,14 @@ namespace sim
             return;
         padState[pad]    = state;
         padColourId[pad] = colourId;
+    }
+
+    void SimPadGrid::setPanelArtwork(const PanelArtwork* panel)
+    {
+        artwork = panel;
+        for(auto& pad : pads) pad->setHardwareSkin(artwork != nullptr);
+        resized();
+        repaint();
     }
 
     void SimPadGrid::refresh()
@@ -531,6 +602,7 @@ namespace sim
     {
         setMouseClickGrabsKeyboardFocus( false );
         setWantsKeyboardFocus( false );
+        setTooltip("Touch strip: click or drag vertically");
     }
 
     void SimTouchSlider::setLedLevel( int percent )
@@ -541,6 +613,21 @@ namespace sim
 
     void SimTouchSlider::paint( juce::Graphics& g )
     {
+        if(hardwareSkin)
+        {
+            for(int i = 0; i < 12; ++i)
+            {
+                g.setColour((12 - i) * 100 / 12 <= ledLevel ? palette::led : juce::Colour(0xff4a4b4f));
+                g.fillRoundedRectangle(82.f, 22.f + i * 20.f, 7.2f, 11.f, 1.2f);
+            }
+            if(touchValue >= 0)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.65f));
+                const auto y = 10.f + (getHeight() - 20.f) * (1.f - touchValue / 100.f);
+                g.drawLine(12.f, y, 70.f, y, 2.f);
+            }
+            return;
+        }
         auto b = getLocalBounds().toFloat();
         g.setColour( palette::text );
         g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
@@ -573,8 +660,8 @@ namespace sim
 
     void SimTouchSlider::touch( const juce::MouseEvent& e )
     {
-        auto top    = 24.0f;
-        auto height = juce::jmax( 1.0f, (float)getHeight() - top - 4.0f );
+        auto top    = hardwareSkin ? 10.0f : 24.0f;
+        auto height = juce::jmax( 1.0f, (float)getHeight() - top - (hardwareSkin ? 10.0f : 4.0f) );
         setTouch( (int)std::round( 100.0f * ( 1.0f - ( e.position.y - top ) / height ) ) );
     }
 

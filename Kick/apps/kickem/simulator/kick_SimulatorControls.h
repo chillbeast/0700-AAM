@@ -13,6 +13,7 @@
 ///
 namespace sim
 {
+    class PanelArtwork;
     using DCC = contracts::DeviceControlContracts;
 
     namespace hw
@@ -48,7 +49,7 @@ namespace sim
     ///
     /// Momentary hardware button with LED. Optional SHIFT function (alternate code).
     ///
-    class SimButton : public juce::Component
+    class SimButton : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         SimButton( juce::String label, int code, juce::String shiftLabel = {}, int shiftCode = DCC::EN_INVALID_ID );
@@ -58,6 +59,7 @@ namespace sim
         void setLed( bool on );
         void setLedColour( juce::Colour c ) { ledColour = c; repaint(); }
         bool isLedOn() const { return led; }
+        void setHardwareSkin(bool enabled, bool round = false) { hardwareSkin = enabled; roundHardware = round; repaint(); }
 
         /// Press / release exactly as a mouse click does (used by mouse handlers and the self-test).
         void press( bool isDown, bool shiftModifier = false );
@@ -74,6 +76,7 @@ namespace sim
         int          code, shiftCode;
         int          sentCode { DCC::EN_INVALID_ID };
         bool         down { false }, led { false };
+        bool         hardwareSkin { false }, roundHardware { false };
         juce::Colour ledColour { palette::led };
     };
 
@@ -91,7 +94,7 @@ namespace sim
     ///
     /// Rotary control. Endless encoders emit step counts; absolute pots report 0..1.
     ///
-    class SimKnob : public juce::Component
+    class SimKnob : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         enum class Mode
@@ -109,6 +112,8 @@ namespace sim
         /// Turn by encoder detents (+cw / -ccw) / push the centre, exactly as the mouse does.
         void turn( int steps );
         void pushCentre( bool isDown );
+        void setHardwareSkin(bool enabled) { hardwareSkin = enabled; repaint(); }
+        bool hitTest(int x, int y) override;
 
         void paint( juce::Graphics& g ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
@@ -124,6 +129,7 @@ namespace sim
         juce::String label;
         Mode         mode;
         bool         angularDrag;
+        bool         hardwareSkin { false };
         double       angle { 0.0 }; // display angle (degrees)
         double       value { 0.75 }; // absolute mode
         double       accum { 0.0 };
@@ -136,7 +142,7 @@ namespace sim
     ///
     /// One drum pad. Colour/state are driven by the pad packets the app sends to the hardware.
     ///
-    class SimPad : public juce::Component
+    class SimPad : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         explicit SimPad( int index );
@@ -146,6 +152,7 @@ namespace sim
         void hit( bool isDown, int velocity = 100 );
         /// Pressure on a held pad, 0..127 (what dragging upwards does).
         void press( int pressure );
+        void setHardwareSkin(bool enabled) { hardwareSkin = enabled; repaint(); }
         void paint( juce::Graphics& g ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
         void mouseDrag( const juce::MouseEvent& e ) override;
@@ -154,6 +161,7 @@ namespace sim
     private:
         int          index;
         bool         lit { false }, down { false };
+        bool         hardwareSkin { false };
         int          lastVelocity { 0 }, lastPressure { 0 };
         juce::Colour colour { juce::Colours::grey };
     };
@@ -170,6 +178,7 @@ namespace sim
         void paint( juce::Graphics& g ) override;
         void setBankName( const juce::String& name );
         SimPad& getPad( int index ) { return *pads[(size_t)index]; }
+        void setPanelArtwork(const PanelArtwork* artwork);
 
         /// Apply an EN_PKT_TYPE_PAD packet sent by the app to the hardware.
         void applyPadPacket( const CPktMgr::HWMsg_t& m );
@@ -182,17 +191,19 @@ namespace sim
         std::array<int, 16>                     padState {};
         std::array<int, 16>                     padColourId {};
         juce::String                            bankName { "A" };
+        const PanelArtwork* artwork { nullptr };
     };
 
     ///
     /// Touch strip. Emits slider packets; shows the LED level the app sends back.
     ///
-    class SimTouchSlider : public juce::Component
+    class SimTouchSlider : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         SimTouchSlider();
         void setLedLevel( int percent );
         void setTouch( int value ); // 0..100, sends a slider packet when it changes
+        void setHardwareSkin(bool enabled) { hardwareSkin = enabled; repaint(); }
         void paint( juce::Graphics& g ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
         void mouseDrag( const juce::MouseEvent& e ) override;
@@ -201,5 +212,6 @@ namespace sim
         void touch( const juce::MouseEvent& e );
         int  touchValue { -1 };
         int  ledLevel { 0 };
+        bool hardwareSkin { false };
     };
 }

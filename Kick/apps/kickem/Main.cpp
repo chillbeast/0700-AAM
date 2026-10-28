@@ -116,13 +116,18 @@ public:
             : juce::DocumentWindow( name, juce::Colour( 0xff202020 ), juce::DocumentWindow::allButtons )
         {
             setUsingNativeTitleBar( true );
-            setContentOwned( new sim::Simulator(), false );
+            auto* simulator = new sim::Simulator();
+            setContentOwned( simulator, false );
             setResizable( true, false );
-
-            const int bw = sim::SimulatorBoard::boardWidth, bh = sim::SimulatorBoard::boardHeight;
-            setResizeLimits( bw / 4, bh / 4, bw * 2, bh * 2 );
+            setResizeLimits(360, 300, 3600, 3000);
             getConstrainer()->setFixedAspectRatio( 0.0 );
+            simulator->onLayoutChanged = [this, simulator] { fitPanel(simulator->preferredSize()); };
+            fitPanel(simulator->preferredSize());
+        }
 
+        void fitPanel(juce::Point<int> size)
+        {
+            const int bw = size.x, bh = size.y;
             // Fit ~90% of the primary display, keeping the panel's aspect ratio.
             juce::Rectangle<int> area( 0, 0, 1600, 900 );
             if( auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() )

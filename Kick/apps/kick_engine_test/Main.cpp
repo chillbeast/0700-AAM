@@ -2031,6 +2031,7 @@ namespace
 } // namespace
 
 #include "AuditRegressionTests.h"
+#include "OptimizationRegressionTests.h"
 
 class KickEngineTestApp : public juce::JUCEApplication
 {
@@ -2074,7 +2075,8 @@ private:
             return;
         }
 
-        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_AUDIT_ONLY", {}).getIntValue() == 0)
+        const bool optimizationOnly = juce::SystemStats::getEnvironmentVariable("KICK_TEST_OPTIMIZE_ONLY", {}).getIntValue() != 0;
+        if(!optimizationOnly && juce::SystemStats::getEnvironmentVariable("KICK_TEST_AUDIT_ONLY", {}).getIntValue() == 0)
         {
             testObjectIds( R );
             testSampleRecorder( R );
@@ -2090,7 +2092,8 @@ private:
             testPadLayout( R );
             testEngine( R, kitDir );
         }
-        testAuditRegressions(R);
+        if(!optimizationOnly) testAuditRegressions(R);
+        testOptimizationWave(R);
 
         R.lines.add( "\n" + juce::String( R.passed ) + " passed, " + juce::String( R.failed ) + " failed" );
         exeDir.getChildFile( "engine_test_results.txt" ).replaceWithText( R.lines.joinIntoString( "\n" ) );

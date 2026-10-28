@@ -20,8 +20,10 @@ namespace sim
         std::array<SimButton*, 4> getBankButtons() { return { &bankA, &bankB, &bankC, &bankD }; }
         SimButton&                getShiftButton() { return shiftBtn; }
         SimKnob&                  getJog() { return jog; }
+        void setPanelArtwork(const PanelArtwork* panel);
 
     private:
+        const PanelArtwork* artwork { nullptr };
         // Left block
         SimButton mainBtn { "MAIN", DCC::EN_MAINMODE, "GRID", DCC::EN_GRID };
         SimButton browseBtn { "BROWSE", DCC::EN_BROWSE, "SAVE", DCC::EN_SAVE };

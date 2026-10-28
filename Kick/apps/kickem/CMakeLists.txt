@@ -3,8 +3,9 @@ cmake_minimum_required(VERSION 3.15)
 ## KickEM - software simulator of the KICK front panel with the real Kick UI embedded.
 ## Enabled with -DKICK_SIMULATOR=ON (see apps/CMakeLists.txt).
 
-## Share the version of the main application...
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../kick/version.txt" ver)
+## Community simulator releases have their own version; device firmware retains its upstream version.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" ver)
 
 string(REGEX MATCH "VERSION_MAJOR ([0-9]*)" _ ${ver})
 set(PROJECT_VERSION_MAJOR ${CMAKE_MATCH_1})
@@ -38,6 +39,22 @@ juce_add_gui_app(${TargetName}
         COMPANY_NAME ${TargetCompany}
 )
 
+if(WIN32)
+    # JUCE 7's resource-generation rule omits Info.txt, leaving the old Windows
+    # file version in incremental builds after a community version change.
+    get_target_property(panel_generated_dir ${TargetName} JUCE_GENERATED_SOURCES_DIRECTORY)
+    get_target_property(panel_info_file ${TargetName} JUCE_INFO_FILE)
+    add_custom_command(OUTPUT "${panel_generated_dir}/${TargetName}_resources.rc"
+        APPEND DEPENDS "${panel_info_file}" "${CMAKE_CURRENT_SOURCE_DIR}/version.txt")
+endif()
+
+juce_add_binary_data(KickPanelArtwork
+    NAMESPACE KickPanelData
+    HEADER_NAME KickPanelData.h
+    SOURCES artwork/kick-panel.svg
+)
+target_link_libraries(${TargetName} PRIVATE KickPanelArtwork)
+
 set_target_properties(${TargetName} PROPERTIES
         CXX_STANDARD                    17
         VS_DEBUGGER_WORKING_DIRECTORY   "${CMAKE_BINARY_DIR}"
@@ -70,6 +87,8 @@ target_sources(${TargetName}
         simulator/kick_SimulatorMainControl.cpp
         simulator/kick_SimulatorInterfaceImpl.h
         simulator/kick_SimulatorInterfaceImpl.cpp
+        simulator/kick_PanelArtwork.h
+        simulator/kick_PanelArtwork.cpp
 )
 
 target_compile_definitions(${TargetName}

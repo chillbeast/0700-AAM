@@ -1,9 +1,11 @@
 #include "kick_SimulatorMainControl.h"
+#include "kick_PanelArtwork.h"
 
 namespace sim
 {
     SimulatorMainControl::SimulatorMainControl()
     {
+        setInterceptsMouseClicks(false, true);
         std::vector<SimButton*> all;
         collectButtons( all );
         for( auto* b : all )
@@ -35,6 +37,7 @@ namespace sim
 
     void SimulatorMainControl::paint( juce::Graphics& g )
     {
+        if(artwork) return;
         g.setColour( palette::well );
         g.fillRoundedRectangle( getLocalBounds().toFloat(), 8.0f );
 
@@ -45,6 +48,21 @@ namespace sim
 
     void SimulatorMainControl::resized()
     {
+        if(artwork)
+        {
+            const std::pair<SimButton*, const char*> placements[] = {
+                {&mainBtn, "main"}, {&browseBtn, "browse"}, {&trackMixBtn, "track-mix"}, {&trackMuteBtn, "track-mute"},
+                {&nextSeqBtn, "next-seq"}, {&stepSeqBtn, "step"}, {&tapTempoBtn, "tap"}, {&noteRepeatBtn, "repeat"},
+                {&bankA, "bank-a"}, {&bankB, "bank-b"}, {&bankC, "bank-c"}, {&bankD, "bank-d"},
+                {&backBtn, "back"}, {&copyBtn, "copy"}, {&minusBtn, "minus"}, {&plusBtn, "plus"},
+                {&tcBtn, "tc"}, {&samplerBtn, "sampler"}, {&sampleEditBtn, "sample-edit"}, {&progEditBtn, "program-edit"},
+                {&menuBtn, "menu"}, {&shiftBtn, "shift"}
+            };
+            for(const auto& placement : placements) placement.first->setBounds(artwork->bounds(placement.second));
+            jog.setBounds(artwork->bounds("jog"));
+            jog.toFront(false);
+            return;
+        }
         const int bw = 112, bh = 58, gx = 8, gy = 12;
         const int top = 22;
 
@@ -87,5 +105,16 @@ namespace sim
 
         int jogSize = juce::jmin( navH, cw - 2 * side - 20 );
         jog.setBounds( juce::Rectangle<int>( jogSize, jogSize ).withCentre( { cx0 + cw / 2, navTop + navH / 2 } ) );
+    }
+
+    void SimulatorMainControl::setPanelArtwork(const PanelArtwork* panel)
+    {
+        artwork = panel;
+        std::vector<SimButton*> buttons;
+        collectButtons(buttons);
+        for(auto* b : buttons) b->setHardwareSkin(artwork != nullptr);
+        jog.setHardwareSkin(artwork != nullptr);
+        resized();
+        repaint();
     }
 }

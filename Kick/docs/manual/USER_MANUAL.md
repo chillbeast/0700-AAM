@@ -1,6 +1,6 @@
 # KICK Firmware: User Manual (community build)
 
-This manual describes the community build of the Behringer KICK firmware in this repository. It covers:
+This manual describes community simulator v0.1.2 and the Behringer KICK firmware sources in this repository. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
 
 - the desktop app (`Kick.exe`);
 - the hardware simulator (`KT_KickEM.exe`);
@@ -8,7 +8,7 @@ This manual describes the community build of the Behringer KICK firmware in this
 
 No official manual exists yet, so this one was put together in two ways. First, the UI and engine source was read screen by screen. Second, the test harness was run against the actual build:
 
-- **the engine test runner** (`KickEngineTest`, 112 checks), and
+- **the engine test runner** (`KickEngineTest`; current validation counts are in [RELEASE-NOTES.md](../../../RELEASE-NOTES.md)), and
 - **the simulator tour** (`KICKEM_SELFTEST=tour`). The tour loads a kit and presses every front-panel button and its SHIFT function. On each screen it turns every Q-link, turns the jog wheel and hits a pad, then logs the screen it lands on and takes a snapshot.
 
 The screenshots in this manual come from that tour.
@@ -54,16 +54,22 @@ There are two ways to run the firmware on a PC.
 
 **`Kick.exe`** (in `build/win`) shows the touchscreen UI on its own, at 1024×600. With no front panel attached, you drive it with the mouse (as a touchscreen) and the PC keyboard. Some flows assume the hardware buttons and can't be finished with the mouse. Creating a program with **+** is one example. For those, use the simulator.
 
-**`KT_KickEM.exe`** (in `build/sim`) is the **simulator**. It draws the whole front panel around the real UI: pads, Q-links, jog wheel, touch slider and every button. Panel input goes through the same code path the hardware uses. Pad LEDs and button LEDs light up as they would on the device. There is a desktop shortcut called **KICK Simulator**.
+**`KT_KickEM.exe`** is the **simulator** (`build/sim` for local Debug builds, `build/dist` for the distributable Release build). It draws the front panel around the real UI: pads, Q-links, jog wheel, touch slider and buttons. Panel input goes through the firmware's hardware input path, and the firmware drives its pad and button LEDs. The portable Windows release runs from its extracted folder: keep `assets`, `templates` and `demos` alongside the executable. Open Settings > Audio to choose a Windows audio device. The public package has ASIO disabled.
 
 ### Using the simulator panel
 
+![Hardware panel and saved layout toolbar](../../../docs/images/simulator-panel-v0.1.2.png)
+
+- **Layout:** the toolbar switches between **Hardware**, which follows the physical KICK panel, and **Original**, the wide simulator interface. Your choice is remembered. Switching keeps the same live screen, controls and LEDs.
+- **Artwork:** the hardware panel is an embedded SVG, so it stays sharp when the window is resized. Hover a control to see its function and mouse interaction.
 - **Buttons:** click to press.
 - **SHIFT functions** (the second label on a button) can be reached two ways:
   - Click **SHIFT** first. It latches for the next button press, and the SHIFT labels brighten while it's latched.
   - Or hold the PC **Shift** key while clicking the button.
 - **Pads:** click a pad to hit it. Clicking near the top of the pad gives a louder hit than clicking near the bottom.
 - **Knobs:** drag a Q-link, or use the mouse wheel over it.
+- **Jog / Enter:** drag around the jog wheel or scroll to turn it; click its centre for Enter. The four surrounding corners are BACK, COPY, minus and plus.
+- **MASTER / REC:** these represent analog gain controls on the hardware and remain visual references in the simulator.
 
 ### PC keyboard shortcuts 🔍
 
@@ -552,7 +558,7 @@ A song is a list of steps. Each step has a sequence, a repeat count (1–128), a
 - **Tempo:** there is a song BPM, and a toggle chooses between each sequence's own tempo and the song tempo.
 - **Play:** PLAY or PLAY START plays from the selected step.
 
-*Export* and *Convert > SEQ* are not implemented yet.
+**Export** writes the song's MIDI notes, tempo and time signatures to a .mid file in the project's Exports folder. It does not render the instruments or samples to audio. Rendered WAV export and **Convert > SEQ** remain unimplemented.
 
 ---
 
@@ -911,7 +917,7 @@ Start notes and calibration are under PREFS → CV. Note priority and the port a
 
 **Q-links:** P1 and P2 set the maximum recording length, and P3 sets the threshold.
 
-**Status:** the engine tests check recording, the reverse-recording trim, and stopping. The Sampler's *Export* and *Clear* buttons don't do anything yet.
+**Status:** the engine tests check recording, reverse-recording trim, stopping and WAV output. **Export** saves a completed recording, and **Clear** discards it and its slice markers. Saving reports failures and retains the recording when the write fails. Pad Tap/Hold and slice-assignment combinations still need full workflow acceptance.
 
 ### Looper (SHIFT + SAMPLER) ✅
 
@@ -1310,6 +1316,8 @@ Two other screens are reached from elsewhere:
 
 ## 15. Feature status and known gaps
 
+The current source-backed status is maintained in the [functionality inventory](../../../FEATURE-INVENTORY.md), including panel commands, screen registrations, stored state and acceptance checks. It distinguishes implemented code from tested behavior. Version 0.1.2 includes the vector hardware panel, saved layout selection, sample/source and DSP fixes, and the live audition fixes described in the [release notes](../../../RELEASE-NOTES.md). Existing incomplete firmware features remain listed below.
+
 ### Works (tested in this build)
 
 - Loading projects; playing and stopping sequences.
@@ -1320,31 +1328,35 @@ Two other screens are reached from elsewhere:
 - Drum programs: sample playback, envelopes and the filter.
 - Instrument programs with Basic Synth, pad layouts and pad lights.
 - Program Edit for instruments.
-- **Audio device selection**, including ASIO.
-- Every screen that a panel button opens.
+- **Audio device selection** with Windows native drivers; ASIO is available only in local builds configured with its SDK.
+- Main screen navigation has simulator smoke coverage; opening a screen does not establish that all its controls work.
 - Undo/redo and save/reload for instrument programs.
 
-### Not implemented yet (upstream)
+### Remaining gaps and partial features
 
 | Area | Missing |
 |---|---|
-| Buttons | TAP TEMPO, MASTER, NOTE REPEAT, LATCH, AUTOMATION, 16 LEVELS, TC, ON/OFF and BACK do nothing. LINK is a stub. |
-| Recording | No count-in, swing or replace mode for pad recording (takes always add). Note Repeat isn't implemented. |
-| Timing | No swing or timing correction. Time signature can't be changed. The sequencer clock is 96 PPQN, timed on a background thread, so notes land on audio-block boundaries (10 ms) rather than sample-accurately. |
-| FX | XY FX isn't connected to audio. |
-| Sample Edit | Pitch shift, time stretch, bit reduce. BPM detect, match and to-sequence. Repeat and X-fade. Assign options. |
-| Programs | No drum filter UI or per-layer velocity ranges. Keygroup Key Track does nothing. MIDI program CC sliders aren't connected. Several Audio editor tools are missing. |
-| Song | Export and Convert to Sequence. |
-| Mixers | Arm, Monitor and Limiter buttons. Return/output solo. Pad Mixer sends and routing. |
-| Preferences | Project defaults and auto-save aren't applied. Purge does nothing. Only 4 calibration rows for the 8 CV outputs. |
-| Mutes | Time-division (quantised) muting and mute automation. |
+| Buttons | Default TAP TEMPO/MASTER, NOTE REPEAT/LATCH, AUTOMATION, 16 LEVELS and TC/ON-OFF actions are missing. LINK's overlay and global BACK navigation are incomplete. |
+| Recording | Pad takes always add; count-in, swing and replace mode are missing. |
+| Timing | List Edit Timing Correct does not apply a transform; time-signature editing returns failure. Event delivery is batched rather than guaranteed sample-accurate. Recording grid snap and external MIDI clock do exist. |
+| FX | XY FX has no DSP connection; the Master limiter control has no engine action. |
+| Sample Edit | Destructive Pitch Shift, Time Stretch and Bit Reduce return failure. BPM Detect currently substitutes a fixed beat count; BPM Match/To Sequence, Repeat/X-fade and some assignment/settings paths are incomplete. |
+| Programs | Dedicated drum filter controls and per-layer velocity ranges are incomplete. Keygroup KEY TRACK is unwired. MIDI CC sending exists in the engine, but the editor's state binding is incomplete. Audio Pencil, clipboard, warp and automation need further work or acceptance. |
+| Song | MIDI Export works. Rendered audio export and Convert to Sequence are missing. |
+| Mixers | Track Arm/Monitor, audio-input selection, return/output solo, pad sends/routing and individual pad meters remain incomplete. |
+| Preferences | Most project-creation defaults and startup policy are incomplete. An autosave timer exists, but restart/configuration acceptance remains open. Cache purge is incomplete. Calibration exposes four rows for eight logical CV ports. |
+| Mutes | Quantised muting and mute automation are not applied by their settings dialogs. |
+| Browser | Format Drive is intentionally hidden/unimplemented. Safe OS-level eject still requires device acceptance. |
 
 ### Fixed in this community build
 
 **Instruments, audio and stability:**
 
+- Sample voices have independent silent frames, interpolate across loop boundaries and retain their sample source safely through replacement. Logical playback length excludes resampler padding.
+- Mono Modular output includes effects and release tails. Oscillator and filter coefficient caches retain the exact DSP results when controls, pitch or sample rate change.
+- Browser audition file changes and gain edits are synchronized with rendering. Loading briefly silences preview output instead of blocking audio; missing files stop preview, and mute survives file changes while playback continues through the muted sample.
 - Instrument programs, the Basic Synth engine, pad layouts and their LEDs.
-- The Audio preferences page, with ASIO.
+- The Audio preferences page; ASIO appears only in local SDK-enabled builds.
 - Clean shutdown, with no crashes on exit.
 - Sequence creation returned the wrong index, so new sequences didn't line up.
 - Silent pads, caused by an audio block-size mismatch.
@@ -1398,6 +1410,8 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 | `KICKEM_SELFTEST` | What it does |
 |---|---|
 | `1` | Presses every control type once |
+| `panel` | Loads a bundled scratch template, verifies both layouts, click targets, native screen size, packets, retained state and open-dialog layout switching, and saves full-panel previews. Finishes with Original selected. |
+| `panel-preference` | Repeats the panel checks expecting the saved Original layout at startup; use the same isolated preferences directory as the preceding panel run. |
 | `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads. Then picks Modular and the FM Bell preset and turns Macro 1 |
 | `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads and undoes. Then adds a reverb, cables a new oscillator into the first, and saves a user preset (into the temporary prefs copy). Then switches to Legato with glide, moves the reverb, holds a pad with pressure while logging every module's activity, and deletes the preset. Then adds a Formant module, sets the arpeggiator up through ARP, holds a three-pad chord and goes back |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
@@ -1416,6 +1430,7 @@ These environment variables control the self-tests:
 | `KICKEM_TOUR_PROJECT=<name>` | Which project in `projects/` the tour loads (default *Vintage Soul Kit*) |
 | `KICKEM_TOUR_FROM=<label>` | Start the tour at one button, e.g. `MIDI CONTROL` |
 | `KICK_PREFS_DIR=<folder>` | Use a different preferences folder |
+| `KICKEM_LAYOUT=hardware\|original` | Override the saved startup layout for testing either interface |
 
 **Your files are safe during self-tests:**
 

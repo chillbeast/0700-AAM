@@ -137,6 +137,13 @@ namespace mt
         }
 
         void setSource( ASound::Ptr Source, bool ResetLoopPoints = false );
+        ASound::Ptr getPlaybackSource( uint64_t& Revision ) const noexcept
+        {
+            const juce::SpinLock::ScopedLockType guard( sourceLock );
+            Revision = sourceRevision.load( std::memory_order_relaxed );
+            return source;
+        }
+        uint64_t getSourceRevision() const noexcept { return sourceRevision.load( std::memory_order_acquire ); }
         void setReSampleRate( double SampleRate ) noexcept;
 
         void refresh() noexcept;
@@ -153,6 +160,8 @@ namespace mt
         juce::UndoManager* undo{ nullptr };
 
         std::atomic<double> effRate{ 1.0 };
+        mutable juce::SpinLock sourceLock;
+        std::atomic<uint64_t> sourceRevision{ 0 };
         std::atomic<double> resamplingFactor{ 1.0 };
         double              resamplingRate{ AUDIO_SAMPLE_RATE };
     };

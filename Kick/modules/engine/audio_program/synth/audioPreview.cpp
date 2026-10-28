@@ -37,16 +37,23 @@ namespace mt
 
     AudioPreview::~AudioPreview()
     {
+        const juce::ScopedLock lock(renderLock);
         previewOff();
         player.removeSound();
     }
 
     void AudioPreview::previewOn( const juce::String& Source )
     {
+        const juce::ScopedLock lock(renderLock);
+        previewOff();
+        // An absent file must not restart the previous sample retained by ASound.
+        if(!juce::File(Source).existsAsFile()) return;
+        const bool muted = isMuted();
         auto cGain = gain.getTargetValue();
         gain.setCurrentAndTargetValue( 0.0 );
         gain.setTargetValue( cGain );
         player.setSoundToPlay( Source, -1.0 );
+        player.setMute(muted); // Rebinding the renderer resets its local mute flag.
         // Start
         if( player.isValidSource() )
         {
@@ -57,6 +64,7 @@ namespace mt
 
     void AudioPreview::previewOff()
     {
+        const juce::ScopedLock lock(renderLock);
         // Stop
         player.stop();
         setBypass( true );
@@ -64,6 +72,7 @@ namespace mt
 
     void AudioPreview::setGain( double Gain, bool Force )
     {
+        const juce::ScopedLock lock(renderLock);
         auto g = juce::jlimit( 0.0, 1.0, Gain );
         if( Force )
             gain.setCurrentAndTargetValue( g );
@@ -73,6 +82,7 @@ namespace mt
 
     void AudioPreview::setPan( double Pan, bool Force )
     {
+        const juce::ScopedLock lock(renderLock);
         auto p = juce::jlimit( -1.0, 1.0, Pan );
         if( Force )
             pan.setCurrentAndTargetValue( p );
@@ -82,12 +92,14 @@ namespace mt
 
     void AudioPreview::setGainAndPan( double Gain, double Pan, bool Force )
     {
+        const juce::ScopedLock lock(renderLock);
         setGain( Gain, Force );
         setPan( Pan, Force );
     }
 
     void AudioPreview::prepareToPlay( uint32_t samplerate, uint32_t blocksize )
     {
+        const juce::ScopedLock lock(renderLock);
         AudIO::Object::prepareToPlay( samplerate, blocksize );
         player.setSampleRate( samplerate );
         gain.reset( (double)samplerate, 1.0 );
@@ -101,7 +113,13 @@ namespace mt
 
     void AudioPreview::process( AudIO::Buffer<float>& buffer )
     {
-        if( !isBypassed() && !isMuted() && isRunning() )
+        const juce::ScopedTryLock lock(renderLock);
+        if(!lock.isLocked())
+        {
+            buffer = 0; // Loading a file must never block the audio callback.
+            return;
+        }
+        if( !isBypassed() && isRunning() )
         {
             auto numSamples = buffer.getBlockSize();
 

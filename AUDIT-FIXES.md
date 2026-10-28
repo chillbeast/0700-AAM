@@ -9,8 +9,8 @@ No hardware flashing was performed during the repair pass.
 | Validation | Result |
 |---|---|
 | Original audit baseline | 196 engine checks passed. |
-| Final Debug engine suite | **243 passed, 0 failed**, exit 0. |
-| Final AddressSanitizer engine suite | **243 passed, 0 failed**, exit 0; no report from the repaired rerun. The initial run found H9 and its report is retained. |
+| Audit repair Debug engine suite (2026-10-27) | **243 passed, 0 failed**, exit 0. |
+| Audit repair AddressSanitizer engine suite (2026-10-27) | **243 passed, 0 failed**, exit 0; no report from the repaired rerun. The initial run found H9 and its report is retained. |
 | Simulator audit mode | **5 passed, 0 failed**, exit 0. |
 | Simulator instrument / Modular | Both exit 0 and reach `SELFTEST done` on the final build. |
 | Patch whitespace check | Passed. |
@@ -19,9 +19,9 @@ The 47 checks beyond the original baseline cover the reproduced memory/lifetime 
 
 The graph crossfade intentionally changes structural-edit transients. The existing spectral comparison resets after installing its patch so it measures settled timbre; its comparison and tolerance are unchanged. The export fixture explicitly uses the sequence length, avoiding an incorrect assumption about how many times a shorter track repeats.
 
-Desktop DSP workload: one second of 16-voice oscillator/ladder/drive/delay plus chorus took **344.05 ms in Debug** (218.79 ms in RelWithDebInfo with ASan). This is a development-build workload measurement, not an ARM deadline or individual-function profile; it does not justify replacing accurate DSP functions with approximations.
+Original repair-pass desktop DSP workload: one second of 16-voice oscillator/ladder/drive/delay plus chorus took **344.05 ms in Debug** (218.79 ms in RelWithDebInfo with ASan). This is a development-build workload measurement, not an ARM deadline or individual-function profile; it does not justify replacing accurate DSP functions with approximations.
 
-Local logs and result snapshots are in `../devtools/audit-fixes-*`; test result files remain beside their executables. Use `KICK_TEST_AUDIT_ONLY=1` for the 44 audit checks, or run the ordinary suite for all 243. Use `KICKEM_SELFTEST=audit` for the five shared UI lifetime/empty-state checks.
+Original repair logs and result snapshots are in `../devtools/audit-fixes-*`; test result files remain beside their executables. The original repair suite had 44 audit checks and 243 total checks. Version 0.1.2 also includes 21 optimization/release regressions: `KICK_TEST_AUDIT_ONLY=1` runs 65 checks, `KICK_TEST_OPTIMIZE_ONLY=1` runs 21, and the ordinary suite runs all 264. Use `KICKEM_SELFTEST=audit` for the five shared UI lifetime/empty-state checks.
 
 ## Programs and DSP
 
@@ -117,3 +117,58 @@ Local logs and result snapshots are in `../devtools/audit-fixes-*`; test result 
 Hardware flashing, USB gadget endpoints, UART devices, CV output and Linux multi-process recovery are not exercised on this Windows host. Portable parsers and destructive-file operations are tested with disposable synthetic fixtures. Hardware and ARM timing acceptance remain required; a Windows sanitizer pass is not a Linux/device certification or a leak checker.
 
 The publishing restrictions in AUDIT-HANDOFF.md still apply: push only to `fork` when explicitly requested, no upstream PRs, no ASIO builds/SDK or personal/commercial assets in distribution, and distribution archives only from `Kick/build/dist`.
+
+## Optimization round 2 (2026-10-28)
+
+The original audit repairs were committed as `e5f5ea8c` and published in [v0.1.1](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.1), a community prerelease matching v0.1.0's release status. The public Windows ZIP was downloaded and its SHA-256 verified as `7a3526902e2f992cc76ed7b71830a1c2e976ddbbab65efa459e71a1bb7589e37`.
+
+The changes below follow that release and are included in community simulator v0.1.2. They are not included in v0.1.1.
+
+| ID | Change and coverage |
+|---|---|
+| O1 | Remove the mutable silent frame shared by all sample renderers. Each voice clears and returns its own frame; interpolation marks that frame as non-clear again for JUCE buffer operations. Covers writes from downstream voice filters and resumed playback. |
+| O2 | Fractional forward/reverse loops interpolate from the last trimmed sample back to the first trimmed sample. One-shot playback continues to hold its last sample. In-range loop advances skip unnecessary `fmod`; arbitrary large steps still wrap. |
+| O3 | Mono Modular rendering now runs the stereo effect chain and folds both channels into mono using fixed-size scratch storage. Covers irregular block sizes, note release and delay tails against the stereo sum. Previously mono skipped all effects. |
+| O4 | Cache exact oscillator increments/unison gain and filter coefficients while their inputs remain unchanged. Invalidate on pitch/tune, spread, voice count, cutoff/resonance/key tracking and sample-rate changes as applicable. Cache base knob conversions as well; per-voice modulation is still evaluated normally. Dynamic controls/reset/rate changes match forced coefficient recomputation sample-for-sample. No sine/tanh approximation is introduced. |
+| O5 | Acquire an owned sample-source snapshot and revision under a short lock when binding a voice. Keep its data alive; stop the old voice after a source replacement and bind the new source on reset. Bound reads and duration to the logical sample count, excluding resampler padding. Covers retention, replacement/restart, oversized trims and 500 concurrent source replacements. |
+
+The pre-change Debug and Release reproductions each failed five assertions covering O1-O3. Source ownership was a separate source-confirmed lifetime gap; the added O5 tests exercise the repaired path. The cleared-buffer flag was caught while validating the new owned silent frames and corrected before completion.
+
+`OptimizationRegressionTests.h` now adds 15 permanent checks, including the inventory follow-up. Set `KICK_TEST_OPTIMIZE_ONLY=1` to run those checks. Add `KICK_TEST_DSP_BENCH=1` for isolated static-control benchmarks: 16 voices, one second at 48 kHz in 16-sample sub-blocks, one warmup plus five measured runs, reporting the median. The oscillator uses seven saw unison copies; the filter is an SVF with fixed cutoff/resonance. These measurements exclude the rest of the application and do not establish an ARM callback deadline.
+
+| Isolated Release workload | Before | After | Elapsed-time reduction |
+|---|---|---|---|
+| Oscillator, 16 voices with seven saw unison copies | 28.598 ms | 19.279 ms | 32.6% |
+| SVF, 16 voices with fixed controls | 5.355 ms | 4.024 ms | 24.9% |
+
+Both static-workload output checksums are unchanged; automation tests also compare every output sample. The timings describe these individual modules on this desktop, not an equivalent improvement to the full application. Logs/results are in `../devtools/wave2-*`.
+
+| Round-2 validation before the inventory follow-up | Result |
+|---|---|
+| Full Debug engine suite | **257 passed, 0 failed**, exit 0. |
+| Full ASan engine suite | **257 passed, 0 failed**, exit 0; no `asan_wave2*` report. |
+| Release optimization regressions and benchmarks | **14 passed, 0 failed**, exit 0. |
+| Simulator audit | **5 passed, 0 failed**, exit 0. |
+| Simulator instrument / Modular | Both exit 0 and reach `SELFTEST done`. |
+| Patch whitespace check | Passed. |
+
+
+## Inventory follow-up: preview ownership (2026-10-28)
+
+[FEATURE-INVENTORY.md](FEATURE-INVENTORY.md) records 165 capability groups, their implementation/state evidence and remaining acceptance checks. Its indexes cover all 54 button-command IDs, all 34 screen IDs, 29 registered screens and 1,079 UI callback/signal/event candidates. This is a functionality ledger, not a claim that all features are accepted.
+
+The inventory exposed an integration regression in the local O5 changes: ASoundPlayer embeds its ASound as a member, while its base renderer now retains an owning source snapshot. Loading a synthetic WAV and destroying that wrapper caused an ASan invalid free. The renderer must release that snapshot before the embedded source's lifetime ends. The same detachment is needed for purge/reload. The wrapper now detaches before these operations and rebinds on its next load; a permanent load/purge/reload/destruction regression was added. v0.1.1 predates O5 and is unaffected by this regression.
+
+The original failing report is retained outside the repository at ../devtools/inventory-preview-probe/inventory_preview_asan.21760. After the correction, the same standalone probe exits 0 without a new sanitizer report. Full Debug and ASan suites each pass **258/258**, Release optimization checks pass **15/15**, and the simulator rebuild succeeds. Current results are ../devtools/inventory-{debug,asan,release}-results.txt; fixed probe output is fixed-probe.log beside its harness. The earlier round-2 simulator smoke results remain historical coverage.
+
+At the inventory snapshot, concurrent live Browser audition switching remained a separate locking gap (BR-04). The release review below reproduces and fixes that race; neither change closes all rows in the inventory.
+
+## v0.1.2 release review (2026-10-28)
+
+**O6 / BR-04:** a standalone AddressSanitizer stress probe switching live audition files while rendering reproduced a null slice read in `ASliceRenderer::interpolateSample`, called from `AudioPreview::process`. Source ownership alone could not protect the renderer's mutable binding during a simultaneous load. `AudioPreview` now shares a lock across loading, gain/pan edits and preparation; rendering only tries the lock and clears its output during contention. The callback does not wait for file I/O. The same 1,000-switch probe now exits 0 without a sanitizer report.
+
+The review also fixed preview mute being reset by source rebinding, muted one-shots not advancing, absent files replaying the previous sound, and output-meter disabling ignoring its argument. Six permanent O6 regressions exercise concurrent file/gain/mute/rate changes, subsequent stable audio, stop/silence, missing-file handling and retained mute/silent progression. Full Debug and ASan suites each pass **264/264**. Original/fixed probe evidence and release-validation logs are outside the repository in `../devtools/release-v0.1.2-review/`.
+
+The simulator now embeds the vector hardware panel, retains Original behind a saved toolbar choice, and keeps dialogs attached to the live screen through layout changes. The panel test checks real click targets and firmware input packets, retained state, restart preference, environment overrides and switching with an open dialog. Popup checks now use the bundled template instead of a local commercial kit. Clicking the already-selected layout no longer refits the window. The simulator has its own 0.1.2 application version.
+
+The README now starts with the maintainer's unofficial-project disclaimer. The manual, functionality inventory, release notes, artwork notes and repeatable no-ASIO packaging procedure are reconciled for v0.1.2. Release configuration/package results are recorded in [RELEASE-NOTES.md](RELEASE-NOTES.md) and [the release guide](Kick/how-to/release-simulator.md).

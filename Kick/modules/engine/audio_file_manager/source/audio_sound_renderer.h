@@ -33,7 +33,13 @@ namespace mt
         ASoundSlice* getSlice() noexcept { return slice; }
 
         // Duration.
-        double getLength() { return slice ? slice->getSliceLength() : 0.0; };
+        double getLength()
+        {
+            if( !slice || !source || source->getSampleRate() <= 0.0 ) return 0.0;
+            const int end = juce::jlimit( 0, sourceLength, slice->getEnd() );
+            const int begin = juce::jlimit( 0, end, slice->getStart() );
+            return (end - begin) / source->getSampleRate();
+        }
 
         // Mute.
         bool isMuted() const noexcept { return mute.load(); }
@@ -58,6 +64,7 @@ namespace mt
 
     private:
         void step( double PitchRatio, int NumSamples = 1 );
+        juce::AudioSampleBuffer& silentFrame() noexcept { next.clear(); return next; }
 
         inline double getStartPosition()
         {
@@ -66,6 +73,7 @@ namespace mt
 
         inline juce::AudioSampleBuffer& interpolateSample()
         {
+            next.setNotClear(); // Cached pointers do not update JUCE's cleared-buffer flag.
             *pL = slice->gL * linearInterpolator( alpha, inL[m0], inL[m1] );
             *pR = slice->gR * linearInterpolator( alpha, inR[m0], inR[m1] );
             return next;
@@ -73,6 +81,9 @@ namespace mt
 
     private:
         ASoundSlice* slice{ nullptr };
+        ASound::Ptr source; // Keep cached sample pointers alive through source replacement.
+        int sourceLength{ 0 };
+        uint64_t sourceRevision{ 0 };
 
         std::atomic<bool> finished{ true };
         std::atomic<bool> mute{ false };

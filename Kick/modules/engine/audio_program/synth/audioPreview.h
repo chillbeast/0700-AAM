@@ -38,18 +38,18 @@ namespace mt
         bool isRunning() const { return player.isRunning(); };
 
         void setLooping( bool Loop ) { player.setLooping( Loop ); }
-        void setMute( bool Mute ) { player.setMute( Mute ); }
+        void setMute( bool Mute ) { const juce::ScopedLock lock(renderLock); player.setMute( Mute ); }
         void setBypass( bool Bypass ) { bypass.store( Bypass ); }
 
         void previewOn( const juce::String& Source );
         void previewOff();
 
         // Overall program control API's
-        double getGain() { return gain.getTargetValue(); };
-        double getPan() { return pan.getTargetValue(); };
+        double getGain() { const juce::ScopedLock lock(renderLock); return gain.getTargetValue(); };
+        double getPan() { const juce::ScopedLock lock(renderLock); return pan.getTargetValue(); };
 
         bool         isOutMeterEnabled() { return outMeterEnabled.load(); }
-        void         enableOutputMetering( bool Enable ) { outMeterEnabled = true; };
+        void         enableOutputMetering( bool Enable ) { outMeterEnabled = Enable; };
         MTMeterData& getMeter();
 
         void setGain( double Gain, bool Force = false );
@@ -62,6 +62,8 @@ namespace mt
         void process( AudIO::Buffer<float>& buffer );
 
     private:
+        // File loading and UI edits own the lock; the audio callback only tries it.
+        juce::CriticalSection renderLock;
         std::atomic<bool> outMeterEnabled{ false };
         std::atomic<bool> bypass{ true };
 
