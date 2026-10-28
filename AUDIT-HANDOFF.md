@@ -1,5 +1,7 @@
 # Code audit handoff (2026-10-27)
 
+**Community simulator v0.1.3 (2026-10-28):** adds Linux x86_64 alongside Windows x64, portable desktop paths, embedded-device isolation and GCC portability/audio-guard fixes. Six platform regressions bring the full engine suite to 270 checks. The native Linux test runner also avoids nested JUCE event dispatch during startup so a completed suite exits normally. See [RELEASE-NOTES.md](RELEASE-NOTES.md) for final validation and [Linux setup](Kick/how-to/release-simulator.md#linux-desktop) for requirements. Earlier public tags/assets are preserved.
+
 **Review, local repairs and desktop validation completed on 2026-10-27.** See [AUDIT-FIXES.md](AUDIT-FIXES.md) for the implementation, final results, and hardware acceptance limits. The baseline findings below describe the pre-repair revision.
 
 **Community simulator v0.1.2 (2026-10-28):** sample voice/source lifetime fixes, fractional loop seams, mono Modular effects, exact DSP coefficient caching and the release-review live audition race repair are documented at the end of `AUDIT-FIXES.md`. See [RELEASE-NOTES.md](RELEASE-NOTES.md) for the vector panel, validation and remaining limits. The preceding audit build is [v0.1.1](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.1) at `e5f5ea8c`.
@@ -15,7 +17,7 @@ The completed pass adds 30 findings to the 32 listed here. Eleven findings were 
 ## Project and rules
 
 - **Repository:** the community fork of the Behringer KICK firmware, at `E:\BehringerKick\0700-AAM`, branch `desktop-build`.
-- **Stack:** C++17, JUCE 7.0.12, CMake with CPM, MSVC VS2022 on Windows. The device itself is an RK3588 running ARM Linux; the Windows simulator `KT_KickEM` is built from the same code.
+- **Stack:** C++17, JUCE 7.0.12, CMake with CPM, MSVC VS2022 on Windows and GCC 11 on Ubuntu 22.04 for the Linux x86_64 simulator. The device itself is an RK3588 running ARM Linux; desktop `KT_KickEM` builds share its UI/engine source.
 - **Review baseline:** `1a6f1769`, tagged `v0.1.0`, was already pushed to the fork. The working tree was clean before the audit; subsequent repairs are recorded in branch history.
 
 **Publishing rules (must follow):**
@@ -41,7 +43,7 @@ Run the builds from PowerShell; Git Bash mangles MSBuild `/flags`.
 
 - **Engine tests:** run `cmake --build Kick/build/win --config Debug --target KickEngineTest --parallel`, then run the exe.
   - It writes `engine_test_results.txt` next to the exe, and the exit code is the number of failures.
-  - The v0.1.2 suite passes 264/264 in Debug and ASan (243 audit-repair checks plus 21 optimization/release regressions). The original 196-check baseline and pre-repair memory-error evidence are preserved in the review; use the permanent regressions for the current tree.
+  - The v0.1.3 full suite has 270 checks (the v0.1.2 baseline of 264 plus six desktop platform checks); the focused optimization/platform run has 27. Current results are in RELEASE-NOTES.md. The original 196-check baseline and pre-repair memory-error evidence are preserved in the review; use the permanent regressions for the current tree.
 - **Simulator self-tests:**
   - Set `KICKEM_SELFTEST=1|audit|instrument|audio|tour|modular|panel|panel-preference|popup`.
   - Add `KICKEM_LOG=<file>` to write a log.

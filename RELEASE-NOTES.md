@@ -1,5 +1,33 @@
 # Community simulator releases
 
+## v0.1.3
+
+Add the Linux x86_64 desktop simulator, built against Ubuntu 22.04/glibc 2.35, alongside Windows x64. Existing v0.1.2 tags and assets are preserved.
+
+- Resolve desktop assets/templates/demos and project defaults beside the executable on Linux. Keep the preferences override and consistent `build/dist` output paths.
+- Separate desktop behavior from embedded hardware: disable I2C/CV device access, USB gadget endpoints, device Wi-Fi/Ethernet configuration, firmware flashing, backlight/timezone and host power commands. I2C stubs report unavailable and clear failed reads.
+- Preserve non-finite audio guards by removing GCC/Clang fast-math flags. Fix the GCC JUCE integer/SIMD overload conflict, missing thread headers and an incorrectly inline-declared LFO helper.
+- Add `--version`, six desktop platform regressions and deterministic synthetic test-kit generation.
+- Run the engine suite outside an asynchronous JUCE callback to prevent nested Linux event dispatch from hanging after completion. Trim quoted test-kit arguments before parsing on Windows.
+- Extend the package tool to create Linux `.tar.gz` archives with executable launcher permissions, ELF/dependency checks, source/build metadata and checksums. Update Linux requirements and build/test instructions in the manual and release guide.
+
+The Linux package is a desktop application for an X11/XWayland session, using system ALSA/JACK libraries. Embedded firmware paths remain separate. See [Linux setup](Kick/how-to/release-simulator.md#linux-desktop) and the [functionality inventory](FEATURE-INVENTORY.md) for setup and remaining feature/hardware limits.
+
+Validation (2026-10-28):
+
+| Check | Result |
+|---|---|
+| Windows full Debug engine suite | 270 passed, 0 failed, exit 0 |
+| Windows full AddressSanitizer engine suite | 270 passed, 0 failed, exit 0; no new sanitizer report |
+| Windows Release optimization/platform regressions | 27 passed, 0 failed, exit 0 |
+| Native Linux Release full engine suite | 270 passed, 0 failed, exit 0 |
+| Release UI on each platform | All nine cases pass: panel/preference/Original override, popups in both layouts, Audio, audit, instrument and Modular |
+| Panel and shared UI assertions | 227 per panel run; 5 in the shared audit, on both platforms |
+| Distribution preflight on each platform | Version 0.1.3; ASIO/ASan disabled; 899 tracked runtime files match source |
+| Linux compatibility | x86_64 ELF; all linked libraries resolve; highest required glibc version 2.35 |
+
+Linux engine/audio checks use a private PulseAudio null sink through ALSA, and GUI checks use Xvfb. They establish native desktop behavior without physical audio/MIDI or embedded-device acceptance. Windows engine suites run sequentially because their temporary project names overlap. Package contents, executable modes, manifest hashes and fresh-extraction smoke checks are verified before publication using [the release procedure](Kick/how-to/release-simulator.md).
+
 ## v0.1.2
 
 This unofficial Windows simulator release adds a vector KICK panel and fixes sample playback, Modular effects and live Browser audition. It builds on the v0.1.1 audit repairs. The manufacturer's firmware sources still contain partial and missing features; this release does not certify physical hardware behavior.

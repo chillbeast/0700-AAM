@@ -166,14 +166,14 @@ namespace mt
         int sampleCopySize = 0;
         if( playingBackwords )
         {
-            sampleCopySize = ( pos - regionStart < bufferToFill.numSamples ) ? static_cast<int>( juce::jmax<juce::int64>(0, pos - regionStart) ) : bufferToFill.numSamples;
+            sampleCopySize = ( pos - regionStart < bufferToFill.numSamples ) ? static_cast<int>( std::max<juce::int64>(0, pos - regionStart) ) : bufferToFill.numSamples;
             reader->read( bufferToFill.buffer, bufferToFill.startSample, sampleCopySize, pos - sampleCopySize, true, true );
             bufferToFill.buffer->reverse( bufferToFill.startSample, sampleCopySize );
             pos -= sampleCopySize;
         }
         else
         {
-            sampleCopySize = ( length - pos < bufferToFill.numSamples ) ? static_cast<int>( juce::jmax<juce::int64>(0, length - pos) ) : bufferToFill.numSamples;
+            sampleCopySize = ( length - pos < bufferToFill.numSamples ) ? static_cast<int>( std::max<juce::int64>(0, length - pos) ) : bufferToFill.numSamples;
             reader->read( bufferToFill.buffer, bufferToFill.startSample, sampleCopySize, pos, true, true );
             pos += sampleCopySize;
         }

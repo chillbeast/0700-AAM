@@ -2032,6 +2032,7 @@ namespace
 
 #include "AuditRegressionTests.h"
 #include "OptimizationRegressionTests.h"
+#include "DesktopPlatformRegressionTests.h"
 
 class KickEngineTestApp : public juce::JUCEApplication
 {
@@ -2049,7 +2050,9 @@ public:
             _CrtSetReportMode( type, _CRTDBG_MODE_DEBUG );
     #endif
 #endif
-        juce::MessageManager::callAsync( [this, CommandLine]() { run( CommandLine.unquoted() ); } );
+        // The suite pumps events itself. Starting it inside a message callback
+        // re-enters JUCE 7's Linux FD callback vector and can strand the quit message.
+        run( CommandLine.trim().unquoted() );
     }
 
     void shutdown() override { mt::getAudioInterface().shutdown(); }
@@ -2094,6 +2097,7 @@ private:
         }
         if(!optimizationOnly) testAuditRegressions(R);
         testOptimizationWave(R);
+        testDesktopPlatform(R);
 
         R.lines.add( "\n" + juce::String( R.passed ) + " passed, " + juce::String( R.failed ) + " failed" );
         exeDir.getChildFile( "engine_test_results.txt" ).replaceWithText( R.lines.joinIntoString( "\n" ) );

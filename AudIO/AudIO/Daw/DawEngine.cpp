@@ -1,5 +1,7 @@
 #include "DawEngine.h"
 #include "DawSequence.h"
+#include <chrono>
+#include <thread>
 
 #if defined( AUDIO_OBJECT_AUDIO_FILE_RECORDER ) && ( AUDIO_OBJECT_AUDIO_FILE_RECORDER > 0 )
     #include "Objects/DawRecorder.h"

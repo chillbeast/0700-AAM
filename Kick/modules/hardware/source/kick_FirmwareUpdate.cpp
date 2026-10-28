@@ -35,7 +35,7 @@ namespace mt
     int FirmwareUpdate::connect_ipc( bool reconnect )
     {
         int fd = -1;
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         DBG( "IN CONNECT_IPC " );
         struct sockaddr_un servaddr;
         fd = socket( AF_LOCAL, SOCK_STREAM, 0 );
@@ -71,7 +71,7 @@ namespace mt
     int FirmwareUpdate::progress_ipc_receive( int* connfd, struct progress_msg* msg )
     {
         int ret = -1;
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         ret = read( *connfd, msg, sizeof( *msg ) );
         DBG( "ret-> " << ret );
         if( ret != sizeof( *msg ) )
@@ -114,7 +114,7 @@ namespace mt
         cancelRequested.store(false);
         bool mcuFwStatus = ( isMCUImagePresent() && mt::HwPref::getHwPref().getSurfaceVersion().isNotEmpty() );
 
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         if( juce::File( "/tmp/fwupdate/Kick.swu" ).exists() )
         {
             DBG( "In Firmware Upgrade" );
@@ -425,6 +425,10 @@ namespace mt
 
     int FirmwareUpdate::linuxUpdate( bool status )
     {
+#ifdef KICK_DESKTOP
+        juce::ignoreUnused(status);
+        return FAILURE;
+#endif
         int fwstatus = SUCCESS;
         DBG( "IN FIRMWRE UPDATE" );
         swupdatemsg_t data{};
@@ -432,7 +436,7 @@ namespace mt
         static double _totalProgress = 0.0;
         bool          mcustaus       = ( isMCUImagePresent() && mt::HwPref::getHwPref().getSurfaceVersion().isNotEmpty() );
         ;
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         DBG( "Firmware update confirmed by user... Startting upgrade script..." );
         int                 connfd = -1;
         struct progress_msg msg;
@@ -782,7 +786,7 @@ namespace mt
                 DBG( "iTS CONNENCTED" );
                 return status;
             }
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
             sleep( 1 );
 #endif
         }

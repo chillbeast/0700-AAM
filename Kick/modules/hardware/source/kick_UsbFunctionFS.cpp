@@ -22,7 +22,7 @@
 
 #include "kick_UsbFunctionFS.h"
 
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
     #include <stdio.h>
     #include <stdlib.h>
     #include <unistd.h>
@@ -166,7 +166,7 @@ namespace mt
     int USBFunctionFS::openFileDescriptor( const juce::String& filePath )
     {
         int fd = -1;
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         fd = open( filePath.toRawUTF8(), O_RDWR );
 #endif
         return fd;
@@ -174,7 +174,7 @@ namespace mt
 
     void USBFunctionFS::closeFileDescriptor( int fd )
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         if( fd >= 0 )
             ::close( fd );
 #endif
@@ -188,7 +188,7 @@ namespace mt
     int USBFunctionFS::writeData( void* p, size_t size )
     {
         int result = -1;
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         auto* bytes = static_cast<const unsigned char*>(p);
         size_t sent = 0;
         const auto deadline = juce::Time::getMillisecondCounterHiRes() + 5000.0;
@@ -206,7 +206,7 @@ namespace mt
 
     int USBFunctionFS::writeFile(int fp, void* p, size_t size)
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         size_t written = 0;
         const auto* bytes = static_cast<const unsigned char*>(p);
         while(written < size && !threadShouldExit())
@@ -224,7 +224,7 @@ namespace mt
 
     void USBFunctionFS::readCommandFromUSB( juce::String& command )
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         constexpr int bufferSize = 512;
         char          buffer[bufferSize];
         memset( buffer, 0, bufferSize );
@@ -245,7 +245,7 @@ namespace mt
 #endif
     }
 
-#if defined( JUCE_LINUX ) || defined( __linux__ )
+#if (defined( JUCE_LINUX ) || defined( __linux__ )) && !defined(KICK_DESKTOP)
     pid_t USBFunctionFS::popen2( const char* command, int* infp, int* outfp )
     {
         int   p_stdin[2], p_stdout[2];
@@ -307,7 +307,7 @@ namespace mt
         FSdata response{};
         response.key = FAIL;
         bool opened = false;
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         // The host chooses a basename; the device owns the staging directory.
         const auto name = juce::String(filename).replaceCharacter('\\', '/').fromLastOccurrenceOf("/", false, false);
         const juce::File staging(PCMODE_PATH);
@@ -347,7 +347,7 @@ namespace mt
     {
         FSdata response{};
         response.key = FAIL;
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         if(transferFailed || write_filefd < 0 || size == 0 || size > 8 * 1024 * 1024 || downloadedSize > tfilesize || size > tfilesize - downloadedSize)
         { writeData(&response, 4); return -1; }
         std::vector<unsigned char> bytes(size);
@@ -384,7 +384,7 @@ namespace mt
     int USBFunctionFS::handleReadFileCommand( std::string path )
     {
         DBG( "In ReadFile Command" << path );
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         union FSdata  fs;
         std::ifstream file;
         size_t        size = 0;
@@ -419,7 +419,7 @@ namespace mt
     int USBFunctionFS::handleCloseFileCommand()
     {
         bool complete = false;
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         if(write_filefd >= 0)
         {
             complete = !transferFailed && tfilesize > 0 && downloadedSize == tfilesize && ::fsync(write_filefd) == 0;
@@ -461,7 +461,7 @@ namespace mt
         // Implement your command handling logic here
         uint32_t status;
         int      flags;
-#if defined( JUCE_LINUX ) || defined( __linux__ )
+#if (defined( JUCE_LINUX ) || defined( __linux__ )) && !defined(KICK_DESKTOP)
         fd_set         rfds;
         struct timeval tv;
         tv.tv_sec  = 0;
@@ -544,7 +544,7 @@ namespace mt
         else if( strncmp( buff, "ReadFile:", 9 ) == 0 )
         {
             DBG( "ReadFile " << buff );
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
 
             const char* filePath = buff + 9;
             std::string path     = filePath;

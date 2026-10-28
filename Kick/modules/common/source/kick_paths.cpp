@@ -29,7 +29,7 @@ juce::File getAppDirs( DirType T )
     if( T == MTPrefs )
         if( auto dir = juce::SystemStats::getEnvironmentVariable( "KICK_PREFS_DIR", {} ); dir.isNotEmpty() )
             return juce::File( dir ).getFullPathName() + seprator;
-#if defined( _WIN32 ) || defined( _WIN64 )
+#if defined( _WIN32 ) || defined( _WIN64 ) || defined( KICK_DESKTOP )
     auto rootP = juce::File::getSpecialLocation( juce::File::currentApplicationFile ).getParentDirectory().getFullPathName() + seprator;
     if( T == MTAssets )
         return juce::File( rootP + juce::String( MT_SOURCE_SRCDIR ) + seprator + "assets" );
@@ -85,7 +85,7 @@ juce::File getDefaultPath()
     juce::File rootP;
     auto       seprator = juce::File::getSeparatorString();
 
-#if defined( _WIN32 ) || defined( _WIN64 )
+#if defined( _WIN32 ) || defined( _WIN64 ) || defined( KICK_DESKTOP )
     rootP = juce::File::getSpecialLocation( juce::File::currentApplicationFile ).getParentDirectory().getFullPathName() + seprator;
 
 #elif defined( __APPLE_CPP__ ) || defined( __APPLE_CC__ ) || defined( JUCE_MAC )

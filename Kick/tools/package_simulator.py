@@ -1,13 +1,15 @@
-"""Package the Windows community simulator from the no-ASIO dist build only."""
+"""Package a native Windows/Linux community simulator from the dist build only."""
 from argparse import ArgumentParser
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 import ctypes
 import json
+import platform
 import re
 import shutil
 import subprocess
+import tarfile
 import zipfile
 
 repo = Path(__file__).resolve().parents[2]
@@ -42,12 +44,29 @@ def main():
     parts = re.findall(r"VERSION_(?:MAJOR|MINOR|PATCH)\s+(\d+)", (repo / "Kick/apps/kickem/version.txt").read_text())
     assert len(parts) == 3
     version = ".".join(parts)
-    exe = build / "KT_KickEM.exe"
-    assert executable_version(exe) == version, "Rebuild dist: executable version differs from source"
+    windows = platform.system() == "Windows"
+    assert windows or platform.system() == "Linux", "Supported packaging hosts: Windows and Linux"
+    assert platform.machine().lower() in {"amd64", "x86_64"}, "Only x86_64 packages are validated"
+    exe = build / ("KT_KickEM.exe" if windows else "KT_KickEM")
+    if windows:
+        assert executable_version(exe) == version, "Rebuild dist: executable version differs from source"
+    else:
+        header = exe.read_bytes()[:20]
+        assert header[:6] == b"\x7fELF\x02\x01" and int.from_bytes(header[18:20], "little") == 62, "Expected Linux x86_64 ELF"
+        actual = subprocess.check_output(["xvfb-run", "-a", str(exe), "--version"], text=True, timeout=30).strip()
+        assert actual == version, "Rebuild dist: executable version differs from source"
+        dependencies = subprocess.check_output(["ldd", str(exe)], text=True)
+        assert "not found" not in dependencies and "libasan" not in dependencies, dependencies
     cache = (build / "CMakeCache.txt").read_text()
     assert "KICK_ASIO_SDK_DIR:PATH=\n" in cache, "Only the no-ASIO dist configuration may be packaged"
     assert "USE_ASAN_KICK:BOOL=OFF" in cache
-    assert "JUCE_ASIO=0;" in (build / "apps/kickem/KT_KickEM.vcxproj").read_text()
+    if windows:
+        assert "JUCE_ASIO=0;" in (build / "apps/kickem/KT_KickEM.vcxproj").read_text()
+    else:
+        assert "CMAKE_BUILD_TYPE:STRING=Release\n" in cache
+        commands = json.loads((build / "compile_commands.json").read_text())
+        command = next(c["command"] for c in commands if c["file"].endswith("/apps/kickem/Main.cpp"))
+        assert "-DJUCE_ASIO=0" in command and "-DKICK_DESKTOP=1" in command
     tracked = [p.decode("utf-8") for p in git("ls-files", "-z").split(b"\0") if p]
     runtime = [p for p in tracked if p.startswith(("Kick/assets/", "Kick/templates/", "Kick/demos/"))]
     for item in runtime:
@@ -59,7 +78,8 @@ def main():
         return
     assert not git("status", "--porcelain"), "Commit all release inputs before packaging"
     commit = git("rev-parse", "HEAD").decode().strip()
-    name = f"KICK-Simulator-v{version}-win64"
+    platform_name = "Windows x64" if windows else "Linux x86_64"
+    name = f"KICK-Simulator-v{version}-" + ("win64" if windows else "linux-x86_64")
     stage = build / "releases" / name
     stage.mkdir(parents=True, exist_ok=False)
 
@@ -68,7 +88,12 @@ def main():
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
 
-    copy(exe, "KT_KickEM.exe")
+    copy(exe, exe.name)
+    if not windows:
+        launcher = stage / "launch.sh"
+        launcher.write_text('#!/bin/sh\nset -e\ncd -- "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"\nexec ./KT_KickEM "$@"\n', encoding="utf-8")
+        launcher.chmod(0o755)
+        (stage / exe.name).chmod(0o755)
     for item in runtime:
         path = Path(item).relative_to("Kick")
         copy(build / path, path)
@@ -88,9 +113,13 @@ def main():
     copy(juce[0], "licenses/JUCE-LICENSE.md")
     source_url = f"https://github.com/chillbeast/0700-AAM/tree/{commit}"
     (stage / "README.txt").write_text(
-        f"KICK community simulator v{version} - Windows x64\n\n"
-        "Extract the whole archive and run KT_KickEM.exe. Keep assets, templates\n"
-        "and demos alongside the executable. Select a Windows device in Settings > Audio.\n"
+        f"KICK community simulator v{version} - {platform_name}\n\n"
+        + ("Extract the whole archive and run KT_KickEM.exe.\n" if windows else
+           "Extract the whole tar.gz and run ./launch.sh from a writable folder.\n"
+           "Requires an x86_64 Linux desktop, glibc 2.35+ and standard X11/ALSA libraries.\n"
+           "See Kick/how-to/release-simulator.md for Linux runtime dependencies.\n")
+        + "Keep assets, templates and demos alongside the executable.\n"
+        "Select an audio device in Settings > Audio.\n"
         "Use Hardware / Original in the toolbar to choose the saved panel layout.\n"
         "Manual: Kick/docs/manual/USER_MANUAL.md. Changes: RELEASE-NOTES.md.\n"
         "Known gaps: FEATURE-INVENTORY.md. This is an unofficial desktop simulator.\n"
@@ -100,21 +129,34 @@ def main():
         "License: AGPL-3.0-or-later; see LICENSE and licenses/.\n", encoding="utf-8")
     (stage / "BUILD-INFO.json").write_text(json.dumps({
         "version": version, "commit": commit, "branch": "desktop-build", "configuration": "Release",
-        "platform": "Windows x64", "asio": False, "address_sanitizer": False,
+        "platform": platform_name, "asio": False, "address_sanitizer": False,
+        **({} if windows else {"build_baseline": "Ubuntu 22.04", "minimum_glibc": "2.35", "runtime_dependencies": dependencies.splitlines()}),
         "packaged_utc": datetime.now(timezone.utc).isoformat(), "source_url": source_url,
         "tracked_runtime_files": len(runtime), "exe_sha256": digest(exe),
     }, indent=2) + "\n", encoding="utf-8")
     files = sorted(p for p in stage.rglob("*") if p.is_file())
     (stage / "SHA256SUMS.txt").write_text("".join(f"{digest(p)}  {p.relative_to(stage).as_posix()}\n" for p in files), encoding="utf-8")
     files.append(stage / "SHA256SUMS.txt")
-    archive = stage.parent / (name + ".zip")
-    with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as output:
-        for path in files:
-            output.write(path, Path(name) / path.relative_to(stage))
-    with zipfile.ZipFile(archive) as output:
-        assert output.testzip() is None
+    archive = stage.parent / (name + (".zip" if windows else ".tar.gz"))
+    assert not archive.exists()
+    if windows:
+        with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as output:
+            for path in files:
+                output.write(path, Path(name) / path.relative_to(stage))
+        with zipfile.ZipFile(archive) as output:
+            assert output.testzip() is None
+    else:
+        with tarfile.open(archive, "w:gz") as output:
+            for path in files:
+                info = output.gettarinfo(str(path), str(Path(name) / path.relative_to(stage)))
+                info.uid = info.gid = 0
+                info.uname = info.gname = ""
+                with path.open("rb") as stream:
+                    output.addfile(info, stream)
+        with tarfile.open(archive) as output:
+            assert len(output.getmembers()) == len(files)
     checksum = digest(archive)
-    archive.with_suffix(".zip.sha256").write_text(f"{checksum}  {archive.name}\n", encoding="utf-8")
+    Path(str(archive) + ".sha256").write_text(f"{checksum}  {archive.name}\n", encoding="utf-8")
     print(json.dumps({"version": version, "commit": commit, "stage": str(stage), "archive": str(archive),
                       "sha256": checksum, "bytes": archive.stat().st_size, "files": len(files)}, indent=2))
 

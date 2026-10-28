@@ -1,9 +1,9 @@
 # KICK Firmware: User Manual (community build)
 
-This manual describes community simulator v0.1.2 and the Behringer KICK firmware sources in this repository. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
+This manual describes community simulator v0.1.3 and the Behringer KICK firmware sources in this repository. Windows x64 and Linux x86_64 desktop builds are available. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
 
 - the desktop app (`Kick.exe`);
-- the hardware simulator (`KT_KickEM.exe`);
+- the hardware simulator (`KT_KickEM.exe` on Windows, `KT_KickEM` on Linux);
 - what the firmware does on the device.
 
 No official manual exists yet, so this one was put together in two ways. First, the UI and engine source was read screen by screen. Second, the test harness was run against the actual build:
@@ -55,6 +55,8 @@ There are two ways to run the firmware on a PC.
 **`Kick.exe`** (in `build/win`) shows the touchscreen UI on its own, at 1024×600. With no front panel attached, you drive it with the mouse (as a touchscreen) and the PC keyboard. Some flows assume the hardware buttons and can't be finished with the mouse. Creating a program with **+** is one example. For those, use the simulator.
 
 **`KT_KickEM.exe`** is the **simulator** (`build/sim` for local Debug builds, `build/dist` for the distributable Release build). It draws the front panel around the real UI: pads, Q-links, jog wheel, touch slider and buttons. Panel input goes through the firmware's hardware input path, and the firmware drives its pad and button LEDs. The portable Windows release runs from its extracted folder: keep `assets`, `templates` and `demos` alongside the executable. Open Settings > Audio to choose a Windows audio device. The public package has ASIO disabled.
+
+**Linux:** extract the Linux x86_64 `.tar.gz` into a writable folder and run `./launch.sh`. The native executable is `KT_KickEM`. It requires glibc 2.35 or newer and an X11/XWayland session; [Linux setup](../../how-to/release-simulator.md#linux-desktop) lists runtime/build dependencies. Choose an ALSA or JACK device in Settings > Audio. Assets, templates, demos, projects and preferences resolve beside the executable; `KICK_PREFS_DIR` can override the preferences location. Embedded I2C/CV, USB gadget, firmware update, network configuration and host power controls are disabled in desktop builds.
 
 ### Using the simulator panel
 
@@ -198,7 +200,7 @@ The `.kickPrj` file must have the same name as its folder. The app opens `<folde
 Where the folders live:
 
 - **On the device:** `/home/Kick/projects`, `/app/demos`, `/app/templates`.
-- **On Windows:** `projects`, `demos` and `templates` folders next to the exe.
+- **On desktop Windows/Linux:** `projects`, `demos` and `templates` folders next to the executable.
 
 **Saving** 🔍 happens in three ways:
 
@@ -1281,7 +1283,7 @@ The tabs, left to right:
    - Tap-tempo LED.
    - Date, time and time zone.
 4. **Audio** (new) ✅
-   - Audio device type: ASIO, Windows Audio or DirectSound on Windows; ALSA on Linux.
+   - Audio device type: ASIO, Windows Audio or DirectSound on Windows; ALSA/JACK on Linux. Public Windows packages exclude ASIO.
    - Device, input channels (up to 2), output pair, sample rate and buffer size.
    - Saved to `prefs/audio_device.xml` and reopened at the next start.
 
@@ -1316,7 +1318,7 @@ Two other screens are reached from elsewhere:
 
 ## 15. Feature status and known gaps
 
-The current source-backed status is maintained in the [functionality inventory](../../../FEATURE-INVENTORY.md), including panel commands, screen registrations, stored state and acceptance checks. It distinguishes implemented code from tested behavior. Version 0.1.2 includes the vector hardware panel, saved layout selection, sample/source and DSP fixes, and the live audition fixes described in the [release notes](../../../RELEASE-NOTES.md). Existing incomplete firmware features remain listed below.
+The current source-backed status is maintained in the [functionality inventory](../../../FEATURE-INVENTORY.md), including panel commands, screen registrations, stored state and acceptance checks. It distinguishes implemented code from tested behavior. Version 0.1.3 adds Linux desktop support to v0.1.2's vector hardware panel, saved layout selection, sample/source, DSP and live audition fixes; see the [release notes](../../../RELEASE-NOTES.md). Existing incomplete firmware features remain listed below.
 
 ### Works (tested in this build)
 
@@ -1328,7 +1330,7 @@ The current source-backed status is maintained in the [functionality inventory](
 - Drum programs: sample playback, envelopes and the filter.
 - Instrument programs with Basic Synth, pad layouts and pad lights.
 - Program Edit for instruments.
-- **Audio device selection** with Windows native drivers; ASIO is available only in local builds configured with its SDK.
+- **Audio device selection** with Windows native drivers and Linux ALSA/JACK; ASIO is available only in local Windows builds configured with its SDK.
 - Main screen navigation has simulator smoke coverage; opening a screen does not establish that all its controls work.
 - Undo/redo and save/reload for instrument programs.
 
@@ -1391,7 +1393,7 @@ The current source-backed status is maintained in the [functionality inventory](
 
 ## 16. For developers: the test harness
 
-All of these run on Windows from the build folders.
+The commands below use Windows build folders. For Linux build commands, dependencies, synthetic fixtures and headless audio setup, see [Linux desktop](../../how-to/release-simulator.md#linux-desktop). Run engine suites sequentially on a shared host because their temporary project names overlap.
 
 ### Engine tests
 
@@ -1399,7 +1401,7 @@ All of these run on Windows from the build folders.
 build/win/KickEngineTest.exe
 ```
 
-- **What it covers:** about 196 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine (presets, patch editing, cables, effects, user presets, macro names, mono/legato/glide, pressure, unison, ladder, activity, tempo sync, arpeggiator, Formant, Ring Mod; every preset plays and releases), pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
+- **What it covers:** 270 checks in v0.1.3: recorder, looper, filter, envelopes, Basic Synth, Modular presets/modules/routing/effects/play modes, pad layouts and end-to-end engine workflows (pads, velocity, sequencer, save/reload/undo, sampler, looper), plus audit repairs, playback/preview regressions and desktop platform guards. `KICK_TEST_OPTIMIZE_ONLY=1` runs the 27 focused optimization/platform checks. These counts describe regression checks, not completed firmware features.
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
 - **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 

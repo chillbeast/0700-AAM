@@ -14,7 +14,7 @@ juce_add_gui_app(${TargetName}
         COMPANY_NAME MusicTribe
 )
 
-if(MSVC OR APPLE)
+if(MSVC OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(${TargetName} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<0:>
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<0:>
@@ -28,6 +28,7 @@ target_sources(${TargetName} PRIVATE Main.cpp)
 
 target_compile_definitions(${TargetName}
     PRIVATE
+        KICK_DESKTOP=1
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_PROJECT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_VERSION>"
         JUCE_DISPLAY_SPLASH_SCREEN=0

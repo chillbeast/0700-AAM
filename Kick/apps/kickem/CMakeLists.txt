@@ -60,7 +60,7 @@ set_target_properties(${TargetName} PROPERTIES
         VS_DEBUGGER_WORKING_DIRECTORY   "${CMAKE_BINARY_DIR}"
 )
 
-if(MSVC OR APPLE)
+if(MSVC OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(${TargetName} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<0:>
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<0:>
@@ -94,6 +94,7 @@ target_sources(${TargetName}
 target_compile_definitions(${TargetName}
     PRIVATE
         SIM_BUILD=1
+        KICK_DESKTOP=1
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_PROJECT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_VERSION>"
         JUCE_ALSA=1

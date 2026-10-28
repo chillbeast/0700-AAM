@@ -1,9 +1,9 @@
 # Community simulator release
 
-Run these commands from the repository root on Windows with Visual Studio 2022 and CMake. Publish only to the `fork` remote (`chillbeast/0700-AAM`), never upstream `origin`. Keep the ASIO SDK and SDK-enabled builds out of commits and distribution.
+Windows commands below run from the repository root with Visual Studio 2022 and CMake. The Linux procedure follows. Publish only to the `fork` remote (`chillbeast/0700-AAM`), never upstream `origin`. Keep the ASIO SDK and SDK-enabled builds out of commits and distribution.
 
 1. Review the pending source changes and the [functionality inventory](../../FEATURE-INVENTORY.md). Fix new regressions and document existing incomplete features. Update the README, manual, release notes, audit handoff, inventory and `Kick/apps/kickem/version.txt`. The simulator's community version is separate from `Kick/apps/kick/version.txt`, the upstream device firmware version.
-2. Run the complete Debug and AddressSanitizer engine suites with isolated `KICK_PREFS_DIR` directories. Save `engine_test_results.txt` from each. Investigate every failure and sanitizer report.
+2. Run the complete Debug and AddressSanitizer engine suites sequentially, with isolated `KICK_PREFS_DIR` directories. Their temporary project names overlap on a shared host. Save `engine_test_results.txt` from each. Investigate every failure and sanitizer report.
 3. Configure and build the distribution directory with ASIO and ASan disabled:
 
    ```powershell
@@ -26,3 +26,37 @@ Run these commands from the repository root on Windows with Visual Studio 2022 a
 8. Verify the tag resolves to the committed source, the release is public, its assets can be downloaded anonymously, and the downloaded ZIP matches the local SHA-256. Report the direct release link and exact commit to the user. A branch push alone does not create a downloadable release.
 
 These checks establish desktop regression coverage for this release. They do not complete every inventory row or establish physical CV/MIDI/USB/UART/update behavior, Linux recovery, or ARM audio timing.
+
+## Linux desktop
+
+The Linux package targets **x86_64**, built on **Ubuntu 22.04** with GCC 11. It requires **glibc 2.35+**, an X11/XWayland desktop and system audio/graphics libraries. Extract the `.tar.gz` to a writable folder and run `./launch.sh`. The archive preserves executable permissions. `./launch.sh --version` prints the community version. Assets and default projects/preferences resolve beside the executable; `KICK_PREFS_DIR` overrides preferences.
+
+On Ubuntu, install runtime libraries if the desktop does not already provide them:
+
+```sh
+sudo apt-get install libasound2 libasound2-plugins libjack-jackd2-0 libfreetype6 libfontconfig1 \
+  libx11-6 libxcomposite1 libxcursor1 libxext6 libxi6 libxinerama1 libxrandr2 libxrender1 libgl1 libatomic1
+```
+
+For a source build, use a Linux filesystem and install build dependencies. The patched JUCE multitouch code requires `libxi-dev`:
+
+```sh
+sudo apt-get install build-essential cmake ninja-build pkg-config git python3 \
+  libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfig1-dev \
+  libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev \
+  libxrandr-dev libxrender-dev libgl1-mesa-dev libglu1-mesa-dev libcurl4-openssl-dev xvfb xauth
+cmake -S Kick -B Kick/build/dist -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DKICK_SIMULATOR=ON -DKICK_ENGINE_TEST=ON -DTIMESTAMP=OFF -DUSE_ASAN_KICK=OFF
+cmake --build Kick/build/dist --target KT_KickEM KickEngineTest --parallel 4
+python3 Kick/tools/make_test_kit.py Kick/build/test-kit
+KICK_PREFS_DIR="$PWD/Kick/build/test-prefs" xvfb-run -a Kick/build/dist/KickEngineTest "$PWD/Kick/build/test-kit"
+python3 Kick/tools/package_simulator.py --check-only
+```
+
+Engine tests need a working audio callback. Headless validation can use ALSA's PulseAudio plugin connected to a private null sink; an Xvfb display supplies GUI rendering. This validates the Linux application and audio callback path without certifying physical interfaces. Run the same panel/preference, popup, audio, instrument and Modular checks as on Windows, with isolated preferences. Also run from a different working directory to catch accidental `/app` or current-directory resource dependencies.
+
+After committing a clean source tree, `python3 Kick/tools/package_simulator.py` creates `KICK-Simulator-v<version>-linux-x86_64.tar.gz` and its `.sha256` under `Kick/build/dist/releases/`. It checks ELF architecture, the executable's `--version`, Release/desktop/ASIO flags, resolved shared-library dependencies and tracked runtime hashes. The archive includes `launch.sh`, the same documentation/licenses and source-commit manifest as the Windows package. Test a fresh extraction, inspect `ldd` for missing libraries, verify all manifest hashes and preserve both executable bits before uploading.
+
+Desktop builds explicitly disable embedded I2C/CV, USB gadget, network configuration, firmware flashing and host power commands. Native system audio and MIDI remain available. Embedded firmware retains its device paths and platform implementation. GCC/Clang builds use normal configuration optimizations so non-finite audio guards remain effective.
+
+Publish Linux and Windows assets under a new version tag when portability fixes change the source. Preserve earlier public tags and archives.

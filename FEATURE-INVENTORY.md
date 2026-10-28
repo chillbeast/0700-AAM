@@ -2,6 +2,8 @@
 
 Snapshot: 2026-10-28; community simulator v0.1.2, based on the v0.1.1 audit commit e5f5ea8c plus O1-O6 playback/DSP and live-preview repairs, the vector panel and its saved layout toggle. The v0.1.1 release predates those additions. See RELEASE-NOTES.md for the release scope and checks.
 
+**v0.1.3 platform update:** Linux x86_64 joins Windows x64 with the same panel/UI/engine. Portable runtime paths and explicit desktop device guards are community extensions; they do not change the 165 base-firmware capability classifications below. Desktop builds disable embedded CV/I2C, USB gadget, network configuration, firmware flashing and host power commands. System audio/MIDI remain available; device acceptance rows still require physical hardware. See [release checks](RELEASE-NOTES.md) and [Linux setup](Kick/how-to/release-simulator.md#linux-desktop).
+
 This is an inventory of user-facing capabilities in the checked-out firmware, its manual, panel protocol and registered screens. It records implementation evidence, stored state and the next acceptance check. It is not a certification of every hardware path, effect algorithm or combination of settings.
 
 Present means a source implementation/path exists. Partial means a known missing or miswired part remains. Missing means a named operation has no effective implementation on the inspected path. Unverified means its implementation or supplied content cannot be established by this inventory. None of these labels alone means complete end-to-end acceptance.
@@ -318,6 +320,8 @@ Non-button inputs are also inventoried: pad note/velocity/aftertouch and SHIFT/b
 - Empty constructors and optional lifecycle handlers are not treated as missing features. Four empty insert slots are intentional and do not mean removed effects return.
 
 ## Validation baseline and limits
+
+The v0.1.3 suite adds six desktop path/device/compiler checks for **270 total**. The focused optimization/platform suite has **27 checks**. Windows and native Linux validation results are recorded in RELEASE-NOTES.md; these additions do not close the remaining capability gaps.
 
 The v0.1.2 engine suites pass **264/264 in Debug and ASan**. Six O6 checks extend the previous 258-check baseline with concurrent live-preview rendering, stable playback, stop, missing-file and mute behavior. Release/package validation is recorded in RELEASE-NOTES.md; it does not exercise every inventory action.
 

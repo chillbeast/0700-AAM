@@ -19,7 +19,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
     #include <iostream>
     #include <fcntl.h>
     #include <linux/i2c-dev.h>
@@ -42,10 +42,15 @@ namespace mt
 
     juce::String WifiManager::executeCommand( const juce::String& command )
     {
+#ifdef KICK_DESKTOP
+        juce::ignoreUnused(command);
+        return "Device Wi-Fi control is unavailable in the desktop simulator";
+#else
         juce::ChildProcess process;
         process.start( command );
         process.waitForProcessToFinish( -1 );
         return process.readAllProcessOutput();
+#endif
     }
 
     bool WifiManager::fileExists( const std::string& filename )
@@ -74,6 +79,10 @@ namespace mt
 
     void WifiManager::saveWifiCredential( const std::string& ssid, const std::string& password )
     {
+#ifdef KICK_DESKTOP
+        juce::ignoreUnused(ssid, password);
+        return;
+#endif
         if( !fileExists( WIFI_CRED_FILE ) )
         {
             std::ofstream file( WIFI_CRED_FILE );
@@ -86,6 +95,9 @@ namespace mt
 
     const std::vector<juce::String> WifiManager::scanWiFiNetworks()
     {
+#ifdef KICK_DESKTOP
+        return {};
+#endif
         juce::String                                      currentSSID;
         juce::String                                      currentFrequency;
         std::map<juce::String, std::vector<juce::String>> wifiNetworks;
@@ -165,12 +177,16 @@ namespace mt
 
     bool WifiManager::connectToWiFi( const juce::String& ssid, const juce::String& password, int priority )
     {
+#ifdef KICK_DESKTOP
+        juce::ignoreUnused(ssid, password, priority);
+        return false;
+#endif
         std::cout << "Network: connecting to wifi SSID: " << ssid << std::endl;
         std::map<std::string, std::string> wifiMap = loadWifiCredentials();
         std::string                        ssid1   = ssid.toStdString();
         juce::String                       result  = "";
 
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         auto it = wifiMap.find( ssid1 );
         if( it != wifiMap.end() )
         {
@@ -205,6 +221,10 @@ namespace mt
 
     void WifiManager::addSSID( const juce::String& ssid, const juce::String& password, int priority )
     {
+#ifdef KICK_DESKTOP
+        juce::ignoreUnused(ssid, password, priority);
+        return;
+#endif
         if( !fileExists( WIFI_CONF_FILE ) )
         {
             std::ofstream file( WIFI_CONF_FILE );

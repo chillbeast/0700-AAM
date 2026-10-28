@@ -41,7 +41,7 @@ namespace mt
 
         while( !threadShouldExit() )
         {
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
             if( !inputDevice.is_open() ) // Check if inputDevice is not valid
             {
                 // Open the input device file
@@ -85,7 +85,7 @@ namespace mt
     std::string HwPref::executeCommand( const std::string& command )
     {
         std::string result = "";
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         char buffer[128];
 
         FILE* pipe = popen( command.c_str(), "r" );
@@ -109,8 +109,8 @@ namespace mt
 
     int HwPref::executeSetCommand( const std::string& command )
     {
-        int result = 0;
-#if( JUCE_LINUX || __linux__ )
+        int result = -1; // Unsupported on desktop builds.
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         result = std::system( command.c_str() );
 #endif
         return result;
@@ -219,11 +219,11 @@ namespace mt
         std::string imageFormat    = ".swu";
         std::string creatFolderCmd = "mkdir " + path;
         DBG( "FwUpdate ->extractImage->  " << creatFolderCmd );
-        system( creatFolderCmd.c_str() );
+        executeSetCommand( creatFolderCmd.c_str() );
         std::string outFullpath = decrptionDir + decryptedFwname;
         std::string cmd         = "mount -o loop -t ext4  " + outFullpath + " " + extractDir;
         DBG( "FwUpdate ->extractImage->  " << cmd );
-        system( cmd.c_str() );
+        executeSetCommand( cmd.c_str() );
         std::vector<std::string> swuFiles = getSWUFiles( extractDir, imageFormat );
         if( swuFiles.empty() )
         {
@@ -243,7 +243,7 @@ namespace mt
     juce::String HwPref::getDevSerial()
     {
         std::string serialNo = "000000000";
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         std::string path = "/sys/devices/soc0/serial_number";
 
         std::ifstream serialFile( path.c_str() );
@@ -465,7 +465,7 @@ namespace mt
     {
         std::string cmd = "tail -c +" + std::to_string( fw_ver_index ) + " " + fwfilepath + " > " + decrptionDir + fwHeaderFile;
         DBG( "removing Header from image" << cmd );
-        int result = system( cmd.c_str() ); // Execute the command using system call
+        int result = executeSetCommand( cmd.c_str() ); // Execute the command using system call
 
 	if ( result != 0 )
     {
@@ -493,8 +493,8 @@ namespace mt
         std::string outFwfilepath = decrptionDir + decryptedFwname;
         std::string inFwfilepath  = decrptionDir + fwHeaderFile;
         std::string cmd           = "mkdir -p " + decrptionDir; // Create decryption directory if not exists
-#if( JUCE_LINUX || __linux__ )
-        system( cmd.c_str() ); // Execute the command using system call to create directory
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
+        executeSetCommand( cmd.c_str() ); // Execute the command using system call to create directory
 
         if( isImgFile( fwfilepath ) )
         { // Check if it's an img file
@@ -503,7 +503,7 @@ namespace mt
                 std::string command = "openssl enc -aes-256-cbc -pbkdf2 -d -salt -in " + inFwfilepath + " -out " + outFwfilepath + " -k '" + decrptKey + "'";
 
                 std::cout << "Decrypting image: " << command << std::endl;
-                int result = system( command.c_str() ); // Execute the command using system call
+                int result = executeSetCommand( command.c_str() ); // Execute the command using system call
 
                 if( result == 0 )
                 {
@@ -601,7 +601,7 @@ namespace mt
 
     bool HwPref::isEthernetCableConnected()
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         std::string ethtoolOutput = executeCommand( "ethtool eth0 | grep 'Link detected'" );
         return ( ethtoolOutput.find( "yes" ) != std::string::npos );
 #endif
@@ -610,9 +610,9 @@ namespace mt
 
     bool HwPref::ethernetEnable( bool status )
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         std::string command = status ? "ifconfig eth0 up" : "ifconfig eth0 down";
-        int         result  = system( command.c_str() ); // Execute the command using system call
+        int         result  = executeSetCommand( command.c_str() ); // Execute the command using system call
         if( result == 0 )
         {
             return true; // Command executed successfully
@@ -628,7 +628,7 @@ namespace mt
 
     bool HwPref::isInterfaceUp()
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         std::string   path = "/sys/class/net/eth0/operstate";
         std::ifstream file( path );
 
@@ -654,7 +654,7 @@ namespace mt
         int         result  = 0;
         std::string command = "ifconfig " + interface + " " + ipAddress + " netmask " + subnetMask;
 	DBG("cmd = " <<command);
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         result = executeSetCommand( command.c_str() );
 #endif
         return result;
@@ -663,7 +663,7 @@ namespace mt
     std::string HwPref::getSubnetMask( const std::string& interface )
     {
         std::string subnetMask = "0.0.0.0";
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         int          sockfd;
         struct ifreq ifr;
 
@@ -699,7 +699,7 @@ namespace mt
 
     std::string HwPref::getGateway( const std::string& interface )
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         // Command to retrieve routing information
         std::string command = "ip route show";
         char        buffer[128];
@@ -750,7 +750,7 @@ namespace mt
         std::string ipAddress = "0.0.0.0";
 
         std::string command = "ip -4 addr show " + interface + " | awk '/inet / {split($2, a, \"\\\\/\"); print a[1]}'";
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
 
         // Get the local IP address
         ipAddress = executeCommand( command );
@@ -785,7 +785,7 @@ namespace mt
     {
         DBG( "GetDate Fucntion Called" );
 
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         setenv( "TZ", timezone.toRawUTF8(), 1 );
 #endif
 
@@ -816,9 +816,9 @@ namespace mt
 
     int HwPref::setTimeZone( juce::String& str )
     {
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         std::string cmd = "timedatectl set-timezone " + str.toStdString();
-        int         ret = system( cmd.c_str() );
+        int         ret = executeSetCommand( cmd.c_str() );
         if( ret == 0 )
         {
             DBG( "setting timezone Success" << cmd );
@@ -832,7 +832,7 @@ namespace mt
 
     int HwPref::setBrightness( int value )
     {
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         if( value < 20 )
         {
             value = 20;
@@ -840,7 +840,7 @@ namespace mt
         std::string setBrightness = "echo  " + std::to_string( value ) + " > /sys/devices/platform/backlight/backlight/backlight/brightness";
         DBG( "Command = " << setBrightness );
 
-        int returnCode = system( setBrightness.c_str() );
+        int returnCode = executeSetCommand( setBrightness.c_str() );
         if( returnCode == 0 )
         {
             DBG( "Command executed successfully." );
@@ -878,6 +878,9 @@ namespace mt
 
         mt::sysSizeInfo sInfo;
         std::string     internalPath = "/home/Kick";
+#ifdef KICK_DESKTOP
+        internalPath = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getFullPathName().toStdString();
+#endif
         mt::SystemResource::getResourceInterface().sizeInfo( internalPath, sInfo );
 
         std::strncpy( info.internalStorageStatus.availableSpace, juce::String( sInfo.avaSize ).toRawUTF8(), sizeof( info.internalStorageStatus.availableSpace ) );
@@ -904,7 +907,7 @@ namespace mt
 
     bool HwPref::isStorageconnected( std::string id ) // flash-> usb , sdcard->SDCARD
     {
-#if defined( __linux__ ) || defined( __linux ) || defined( linux )
+#if (defined( __linux__ ) || defined( __linux ) || defined( linux )) && !defined(KICK_DESKTOP)
         std::fstream versionFile;
         versionFile.open( "/proc/mounts", std::ios::in );
 
@@ -931,7 +934,7 @@ namespace mt
         std::string cmd = std::to_string( year ) + "-" + std::to_string( month ) + "-" + std::to_string( day );
         DBG( "Setting Day -> " << cmd );
         // Execute the command
-        int result = std::system( cmd.c_str() );
+        int result = executeSetCommand( cmd.c_str() );
         // Check if the command executed successfully
         if( result == 0 )
         {
@@ -948,7 +951,7 @@ namespace mt
         std::string cmd = std::to_string( hour ) + ":" + std::to_string( minute ) + ":00";
         DBG( "Setting Day -> " << cmd );
         // Execute the command
-        int result = std::system( cmd.c_str() );
+        int result = executeSetCommand( cmd.c_str() );
         // Check if the command executed successfully
         if( result == 0 )
         {

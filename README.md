@@ -11,7 +11,7 @@ Source code for the Behringer KICK.
 > [!NOTE]
 > **About this fork: a community build, not an official Behringer / MUSIC Tribe release.**
 >
-> The `desktop-build` branch builds and runs the KICK firmware on Windows. It adds a hardware simulator (`KT_KickEM`), so you can play it with no KICK at all. On top of the original code it adds:
+> The `desktop-build` branch builds and runs the KICK firmware on Windows and Linux. It adds a hardware simulator (`KT_KickEM`), so you can play it with no KICK at all. On top of the original code it adds:
 > - **Instrument programs**, with a **Modular synth engine**:
 >   - a grid patch editor, cables, effects and an arpeggiator;
 >   - Mono/Legato with glide, and pad pressure;
@@ -20,8 +20,9 @@ Source code for the Behringer KICK.
 > - **Real CPU and RAM meters**, plus many crash and UI fixes.
 > - **A vector hardware panel**, with live controls and LEDs, plus a saved **Hardware / Original** layout toggle. See the [simulator preview](docs/images/simulator-panel-v0.1.2.png) and [editable SVG](Kick/apps/kickem/artwork/kick-panel.svg).
 > - **Sample playback and DSP fixes**, including loop-boundary interpolation, source lifetime handling and exact coefficient caching.
+> - **Linux x86_64 desktop support**, with portable runtime paths and device-only controls disabled.
 >
-> - **Try it:** download [community v0.1.2](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.2) (Windows x64). Extract the entire zip and run `KT_KickEM.exe` alongside its assets, templates and demos. The Windows package does not include ASIO, personal preferences or commercial sample libraries. Older builds remain under [Releases](https://github.com/chillbeast/0700-AAM/releases).
+> - **Try it:** download [community v0.1.3](https://github.com/chillbeast/0700-AAM/releases/tag/v0.1.3) for Windows x64 or Linux x86_64. Extract the entire archive, then run `KT_KickEM.exe` on Windows or `./launch.sh` on Linux. Keep assets, templates and demos alongside the executable. Packages exclude ASIO, personal preferences and commercial sample libraries. Linux requires glibc 2.35+ and an X11/XWayland desktop; see [Linux setup](Kick/how-to/release-simulator.md#linux-desktop). Older builds remain under [Releases](https://github.com/chillbeast/0700-AAM/releases).
 > - **Manual:** [Kick/docs/manual/USER_MANUAL.md](Kick/docs/manual/USER_MANUAL.md) covers the panel, the screens and the Modular engine.
 > - **Known gaps:** [FEATURE-INVENTORY.md](FEATURE-INVENTORY.md) records implemented, partial, missing and unverified capabilities. Opening a screen or lighting a panel button does not mean the underlying feature is complete. Hardware update, CV, USB/UART and ARM timing acceptance remain pending.
 > - **Release changes and checks:** [RELEASE-NOTES.md](RELEASE-NOTES.md).

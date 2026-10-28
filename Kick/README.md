@@ -9,12 +9,12 @@ Bundled third-party code keeps its own license (see below).
 
 ## Building
 
-The build will not work out of the box:
+The community `desktop-build` branch supports Windows x64 and Linux x86_64 simulators. Use the [release/build guide](how-to/release-simulator.md) for configuration, dependencies, validation and packaging, and the [manual](docs/manual/USER_MANUAL.md) for operation. Public archives are on [GitHub Releases](https://github.com/chillbeast/0700-AAM/releases). Desktop builds use the reconstructed `AudIO` and `ComProtocol` sources included at the repository root and disable embedded device controls.
 
-- **Private dependencies are not included.** `3rdParty.cmake` fetches two internal libraries,
-  `AudIO` and `ComProtocol`, that are not part of this release. Point `MT_PLATFORM_GIT_PATH`
-  at your own replacements (`-DMT_PLATFORM_GIT_PATH=<git base url>`) or remove the code that uses them.
-- **No cross-compilation SDK.** Build one from the companion Buildroot tree
+For an embedded ARM firmware build, additional environment and hardware acceptance are still required:
+
+- **Original private dependencies are not included.** The in-repository reconstructions replace them for community builds. If those directories are absent, `3rdParty.cmake` falls back to the private `MT_PLATFORM_GIT_PATH` repositories; that fallback requires your own replacements/access.
+- **No cross-compilation SDK is distributed.** Build one from the companion Buildroot tree
   (`make KTKick_defconfig && make sdk`) and pass its `share/buildroot/toolchainfile.cmake`
   as `CMAKE_TOOLCHAIN_FILE`. See `how-to/Kick_Compilation.txt`.
 - **JUCE** 7.0.12 is downloaded by CPM and patched with `patches/juce_multitouch_7.0.12.patch`.

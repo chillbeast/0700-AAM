@@ -20,7 +20,7 @@
  */
 #include "kick_I2c.h"
 
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
     #include <iostream>
     #include <fcntl.h>
     #include <linux/i2c-dev.h>
@@ -50,7 +50,10 @@ namespace mt
 
     bool I2CDevice::openDevice()
     {
-#if( JUCE_LINUX || __linux__ )
+#ifdef KICK_DESKTOP
+        return false;
+#endif
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         file_ = open( devicePath_.c_str(), O_RDWR );
         if( file_ < 0 )
         {
@@ -74,7 +77,7 @@ namespace mt
 
     void I2CDevice::closeDevice()
     {
-#if( JUCE_LINUX || __linux__ )
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         if( file_ >= 0 )
         {
             close( file_ );
@@ -86,7 +89,11 @@ namespace mt
 
     bool I2CDevice::writeBytes( const uint8_t* data, int length )
     {
-#if( JUCE_LINUX || __linux__ )
+#ifdef KICK_DESKTOP
+        juce::ignoreUnused(data, length);
+        return false;
+#endif
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         if( !isOpen() )
         {
             DBG( "I2C device is not open" );
@@ -108,7 +115,11 @@ namespace mt
 
     bool I2CDevice::readBytes( uint8_t* buffer, int length )
     {
-#if( JUCE_LINUX || __linux__ )
+#ifdef KICK_DESKTOP
+        if(buffer && length > 0) std::fill_n(buffer, length, uint8_t(0));
+        return false;
+#endif
+#if (( JUCE_LINUX || __linux__ )) && !defined(KICK_DESKTOP)
         if( !isOpen() )
         {
             DBG( "I2C device is not open" );

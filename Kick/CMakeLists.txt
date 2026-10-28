@@ -103,7 +103,9 @@ endif(APPLE)
 
 # Compile with werror in release builds
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -Wno-unknown-pragmas -ffast-math -Ofast" )
+    # Fast-math removes isfinite/NaN guards used by the audio safety checks.
+    # Use CMake's normal optimization level for the selected configuration.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -Wno-unknown-pragmas" )
     ## set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -stdlib=libc++ -funroll-loops -ftree-vectorize -fvectorize")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ")
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")

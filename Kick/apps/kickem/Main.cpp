@@ -13,6 +13,7 @@
 #include "kick_audio_interface.h"
 #include "simulator/kick_Simulator.h"
 #include "simulator/kick_SimulatorInterfaceImpl.h"
+#include <iostream>
 
 //==============================================================================
 class KickEMApplication : public juce::JUCEApplication
@@ -21,11 +22,18 @@ public:
     const juce::String getApplicationName() override { return "KickEM"; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
     // Self-tests may run alongside a simulator the user already has open.
-    bool moreThanOneInstanceAllowed() override { return juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty(); }
+    bool moreThanOneInstanceAllowed() override { return getCommandLineParameterArray().contains("--version") || juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty(); }
 
     //==============================================================================
-    void initialise( const juce::String& /*commandLine*/ ) override
+    void initialise( const juce::String& commandLine ) override
     {
+        if(commandLine.trim() == "--version")
+        {
+            std::cout << getApplicationVersion() << std::endl;
+            quit();
+            return;
+        }
+        normalStartup = true;
         // Self-tests start from a copy of the preferences so they never change the user's
         // (recent projects, current project, audio device), and the copy is thrown away.
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty()
@@ -78,6 +86,7 @@ public:
 
     void shutdown() override
     {
+        if(!normalStartup) return;
         // Same order as apps/kick: detach the UI from the engine before destroying any
         // of it, then the window, the static UI's screens, and the engine last, all
         // while JUCE is still alive.
@@ -148,6 +157,7 @@ public:
     };
 
 private:
+    bool normalStartup { false };
     std::unique_ptr<juce::DocumentWindow>      w;
     std::unique_ptr<KickDeviceAdapter>         adapter;
     std::unique_ptr<KickAudioEngineAdapter>    engineAdapter;

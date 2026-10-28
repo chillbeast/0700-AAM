@@ -104,7 +104,8 @@ namespace AudIO
         inline float poly_blep( float hp ) const;
         inline void  advance_internal( unsigned int NumSamples ) noexcept;
 
-        inline float nextSample_internal( unsigned int NumSamples ) noexcept;
+        // Defined in lfo.cpp and called by advance() from other translation units.
+        float nextSample_internal( unsigned int NumSamples ) noexcept;
         inline float nextSample_polyBlep( unsigned int NumSamples ) noexcept;
     };
 
