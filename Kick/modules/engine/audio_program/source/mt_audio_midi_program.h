@@ -22,6 +22,7 @@
 #pragma once
 
 #include "mt_audio_iprogram.h"
+#include <optional>
 
 namespace mt
 {
@@ -38,6 +39,7 @@ namespace mt
         inline int          getBankMSB() const { return bankMsb.get(); }
         inline int          getProgramChannel() const { return programCh.get(); }
         inline int          getMidiChannel() const { return midiCh.get(); }
+        std::optional<juce::MidiMessage> controllerMessage(const juce::Identifier& Property) const;
 
         // IMidiMsgProcessor
         void noteProcess( juce::Array<juce::MidiMessage>& Msgs ) override;

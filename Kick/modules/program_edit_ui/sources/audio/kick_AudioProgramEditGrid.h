@@ -1,9 +1,8 @@
 #pragma once
-static sigslot::signal<>     sampleNeedRepaint;
-static sigslot::signal<bool> stateNeedChage;
-
 namespace kick_ui
 {
+    inline sigslot::signal<> sampleNeedRepaint;
+    inline sigslot::signal<bool> stateNeedChage;
     class AudioProgramGrid;
     class AudioGridComponent;
 
@@ -201,7 +200,7 @@ namespace kick_ui
 
         AudioScaleComponent()
         {
-            gridData.audioGridChanged.connect( [&] { repaint(); } );
+            gridData.audioGridChanged.connect([&] { repaint(); }, signalScope);
         }
 
     private:
@@ -210,6 +209,7 @@ namespace kick_ui
 
         mt::MTAudioInterface& ae{ mt::getAudioInterface() };
         AudioGridData&        gridData{ AudioGridData::Instance() };
+        std::shared_ptr<mt::Kick::ScopeTracker> signalScope{std::make_shared<mt::Kick::ScopeTracker>()};
     };
 
     class AudioGridComponent : public juce::Component
@@ -227,6 +227,7 @@ namespace kick_ui
 
     private:
         IAudioTools*                                   activeTool{ nullptr };
+        std::shared_ptr<mt::Kick::ScopeTracker> signalScope{std::make_shared<mt::Kick::ScopeTracker>()};
         std::map<AudioGridToolType, IAudioTools*>      tools;
         mt::MTAudioInterface&                          ae{ mt::getAudioInterface() };
         mt::MTAudioProgram*                            pAudio;
@@ -258,6 +259,10 @@ namespace kick_ui
         juce::String          paramName{ "None" };
 
         void paint( juce::Graphics& g ) override;
+        void mouseDown(const juce::MouseEvent& event) override
+        {
+            if(pAudio) { ae.getUndoManager().beginNewTransaction("Edit audio automation"); handleMouseEvent(event); }
+        }
         void mouseUp( const juce::MouseEvent& event ) override;
         void mouseDrag( const juce::MouseEvent& event ) override;
         void handleMouseEvent( const juce::MouseEvent& );
@@ -269,7 +274,12 @@ namespace kick_ui
     {
     public:
         AudioProgramGrid( mt::MTAudioProgram*& Audio );
-        ~AudioProgramGrid() = default;
+        ~AudioProgramGrid() override
+        {
+            stopTimer(); signalScope.reset();
+            audiogridViewport.removeListener(this); scaleViewport.removeListener(this);
+            paramViewport.removeListener(this); phViewport.removeListener(this);
+        }
 
         void                                                                refresh();
         void                                                                handleCommand( CPktMgr::HWMsg_t& );
@@ -304,6 +314,10 @@ namespace kick_ui
         AudioGridComponent          gridComponent;
         AudioScaleComponent         scaleComp;
         AudioHeaderTools            headerTools;
+        std::shared_ptr<mt::Kick::ScopeTracker> signalScope{std::make_shared<mt::Kick::ScopeTracker>()};
+        juce::ValueTree audioClipboard{"AUDIO_CLIPBOARD"};
+        juce::File clipboardProject;
+        int editCursor{-1};
         AudioGridParameterComponent paramComp{ pAudio };
 
         AudioPlayhead     playhead;

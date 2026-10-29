@@ -178,7 +178,7 @@ namespace kick_ui
         };
 
         solo.onClick = [&]() {
-            //busMgr.setBusSolo( busName, solo.getToggleState() );
+            if(pBus) pBus->solo = solo.getToggleState();
 
             if( onSoloChanged )
                 onSoloChanged();
@@ -198,6 +198,7 @@ namespace kick_ui
 
         auto ioValueHandler    = [&]() { ioListBox.setSelected( pBus ? pBus->routedTo.get() : "", juce::dontSendNotification ); };
         auto muteValueHandler  = [&]() { mute.setToggleState( pBus ? pBus->mute.get() : false, juce::dontSendNotification ); };
+        auto soloValueHandler = [&]() { solo.setToggleState(pBus ? pBus->solo.get() : false, juce::dontSendNotification); };
         auto panValueHandler   = [&]() { panSlider.setValue( pBus ? (double)pBus->pan.get() : 0.0, juce::dontSendNotification ); };
         auto levelValueHandler = [&]() { levelSlider.setValue( CommonUtils::gainToMidi( pBus ? (double)pBus->gain.get() : 0.0 ), juce::dontSendNotification ); };
 
@@ -207,6 +208,7 @@ namespace kick_ui
             scope = std::make_shared<mt::Kick::ScopeTracker>();
 
             pBus->routedTo.onValueChange.connect( ioValueHandler, scope );
+            pBus->solo.onValueChange.connect(soloValueHandler, scope);
             pBus->mute.onValueChange.connect( muteValueHandler, scope );
             pBus->pan.onValueChange.connect( panValueHandler, scope );
             pBus->gain.onValueChange.connect( levelValueHandler, scope );
@@ -229,6 +231,7 @@ namespace kick_ui
         if( pBus )
         {
             pBus->routedTo.onValueChange();
+            pBus->solo.onValueChange();
             pBus->mute.onValueChange();
             pBus->pan.onValueChange();
             pBus->gain.onValueChange();
@@ -297,8 +300,7 @@ namespace kick_ui
             case 1: levelSlider.knobRotated( value ); break;
             case 2: panSlider.knobRotated( value ); break;
             case 3:
-                mute.setToggleState( value > 0, juce::dontSendNotification );
-                solo.setToggleState( value <= 0, juce::dontSendNotification );
+                if(pBus && value != 0) { pBus->mute = value > 0; pBus->solo = value < 0; }
                 break;
         }
     }

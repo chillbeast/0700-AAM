@@ -60,6 +60,25 @@ namespace mt
         return EMPTY::VTState;
     }
 
+    juce::ValueTree MTCommonProgram::getEnvelopeState(int note, EnvelopeType type)
+    {
+        if(auto* data = getCommonData(note))
+            return data->vTree.getChildWithName(type == AMPLITUDE ? IDs::AMPENV : type == FILTER ? IDs::FILTERENV : IDs::PITCHENV);
+        return {};
+    }
+    void MTCommonProgram::setEnvelopeEnabled(int note, EnvelopeType type, bool enabled) { auto tree = getEnvelopeState(note, type); if(tree.isValid()) tree.setProperty(IDs::isEnabled, enabled, um); }
+    bool MTCommonProgram::getEnvelopeEnabled(int note, EnvelopeType type) { return getEnvelopeState(note, type).getProperty(IDs::isEnabled, false); }
+    void MTCommonProgram::setEnvelopeRelease(int note, EnvelopeType type, int value) { auto tree = getEnvelopeState(note, type); if(tree.isValid()) tree.setProperty(IDs::release, juce::jlimit(0, 127, value), um); }
+    int MTCommonProgram::getEnvelopeRelease(int note, EnvelopeType type) { return getEnvelopeState(note, type).getProperty(IDs::release, 0); }
+    void MTCommonProgram::setFilterType(int note, int type) { auto tree = getEnvelopeState(note, FILTER); if(tree.isValid()) tree.setProperty("filterType", juce::jlimit(-1, 26, type), um); }
+    int MTCommonProgram::getFilterType(int note) { return getEnvelopeState(note, FILTER).getProperty("filterType", -1); }
+    void MTCommonProgram::setFilterCutoff(int note, double hertz) { auto tree = getEnvelopeState(note, FILTER); if(tree.isValid()) tree.setProperty(IDs::freq, juce::jlimit(20.0, 20000.0, hertz), um); }
+    double MTCommonProgram::getFilterCutoff(int note) { return getEnvelopeState(note, FILTER).getProperty(IDs::freq, 20000.0); }
+    void MTCommonProgram::setFilterResonance(int note, double amount) { auto tree = getEnvelopeState(note, FILTER); if(tree.isValid()) tree.setProperty(IDs::resonance, juce::jlimit(0.0, 97.0, amount), um); }
+    double MTCommonProgram::getFilterResonance(int note) { return getEnvelopeState(note, FILTER).getProperty(IDs::resonance, 0.0); }
+    void MTCommonProgram::setLFOEnabled(int note, bool enabled) { if(auto* data = getCommonData(note)) data->lfoIsEnabled = enabled; }
+    bool MTCommonProgram::getLFOEnabled(int note) { auto* data = getCommonData(note); return data && data->lfoIsEnabled.get(); }
+
     // LFO
     void MTCommonProgram::setLFOType( int Note, int Type )
     {

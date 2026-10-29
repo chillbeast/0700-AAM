@@ -38,5 +38,6 @@ namespace mt
         MTDrumProgram*                            pDrum{ nullptr };
         std::vector<std::unique_ptr<ISynthVoice>> voices;
         std::map<int, int>                        noteLayerIdx;
+        std::array<bool, 128> triggering{};
     };
 };

@@ -215,6 +215,10 @@ namespace kick_ui
             if( pTrack )
                 pTrack->midiPort = Port;
         };
+        armButton.setClickingTogglesState(true); monitorButton.setClickingTogglesState(true);
+        armButton.setComponentID("track-arm"); monitorButton.setComponentID("track-monitor");
+        armButton.onClick = [this] { if(pTrack) pTrack->armed = armButton.getToggleState(); };
+        monitorButton.onClick = [this] { if(pTrack) pTrack->monitor = monitorButton.getToggleState(); };
 
         levelSlider.onValueChanged = [&]( double Value ) {
             if( pTrack )
@@ -260,7 +264,6 @@ namespace kick_ui
         };
 
         ui::connectTheme( *this, [&]() {
-            armButton.setImages( "Arm_normal" );
             monitorButton.setImages( "Monitor_normal", "Monitor_active" );
             soloButton.setImages( "Solo_normal", "Solo_active" );
             muteButton.setImages( "Mute_normal", "Mute_active" );
@@ -317,8 +320,11 @@ namespace kick_ui
             pTrack->solo.onValueChange.connect( ( soloValueHandler ), scope );
             pTrack->level.onValueChange.connect( ( levelValueHandler ), scope );
             pTrack->route.onValueChange.connect( ( routeHandler ), scope );
+            pTrack->armed.onValueChange.connect([this] { armButton.setToggleState(pTrack->armed.get(), juce::dontSendNotification); }, scope);
+            pTrack->monitor.onValueChange.connect([this] { monitorButton.setToggleState(pTrack->monitor.get(), juce::dontSendNotification); }, scope);
         }
-
+        armButton.setToggleState(pTrack && pTrack->armed.get(), juce::dontSendNotification);
+        monitorButton.setToggleState(pTrack && pTrack->monitor.get(), juce::dontSendNotification);
         updateData();
     }
 
@@ -424,6 +430,7 @@ namespace kick_ui
         levelSlider.setBoundsRelative( .7089f, .0892f, .1188f, .8214f );
         soloButton.setBoundsRelative( .9108f, .0892f, .0594f, .3928f );
         monitorButton.setBoundsRelative( .8465f, .5178f, .0594f, .3928f );
+        armButton.setBoundsRelative(.8465f, .0892f, .0594f, .3928f);
         muteButton.setBoundsRelative( .9108f, .5178f, .0594f, .3928f );
     }
 

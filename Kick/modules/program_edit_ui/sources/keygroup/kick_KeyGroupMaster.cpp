@@ -44,6 +44,15 @@ namespace kick_ui
             kick_ui::signals::sigScreenOpen( kick_ui::Screen::Inserts );
         };
 
+        keyTrack.setComponentID("keygroup-key-track");
+        keyTrack.setClickingTogglesState(true);
+        keyTrack.onClick = [&]() {
+            if(!pKeygroup) return;
+            if(auto* undo = pKeygroup->getUndoManager()) undo->beginNewTransaction("Key tracking");
+            for(auto key : keys)
+                if(auto* zone = pKeygroup->getKeysClip(key)) zone->keyTracking = keyTrack.getToggleState();
+        };
+
         kgPoly.onValueChanged = [&]( int Index ) {
             if( pKeygroup )
                 pKeygroup->setPolyphony( Index );
@@ -75,9 +84,10 @@ namespace kick_ui
         };
 
         samplePlay.onSelectionChanged = [&]( const int Index, const juce::String& Value ) {
-            if( pKeygroup )
-                pKeygroup->setNoteSamplePlay( keys[0], toEnum<mt::SamplePlayType>( Index ) );
+            if(pKeygroup && !keys.empty() && Index >= 0 && Index < 3)
+                pKeygroup->setNoteSamplePlay(keys[0], Index == 0 ? mt::SamplePlayType::ONE_SHOT : Index == 1 ? mt::SamplePlayType::NOTE_ON : mt::SamplePlayType::NOTE_OFF);
         };
+        samplePlay.setComponentID("keygroup-sample-play");
 
         muteGroup.onValueChanged = [&]( int Index ) {
             if( pKeygroup )
@@ -111,7 +121,15 @@ namespace kick_ui
         scope.reset();
         if( pKeygroup && keys.size() )
         {
+            if(auto* zone = pKeygroup->getKeysClip(keys[0]))
+                keyTrack.setToggleState(zone->keyTracking.get(), juce::dontSendNotification);
             scope = std::make_shared<mt::Kick::ScopeTracker>();
+            if(auto* zone = pKeygroup->getKeysClip(keys[0]))
+                zone->keyTracking.onValueChange.connect([this] {
+                    if(pKeygroup && !keys.empty())
+                        if(auto* current = pKeygroup->getKeysClip(keys[0]))
+                            keyTrack.setToggleState(current->keyTracking.get(), juce::dontSendNotification);
+                }, scope);
 
             pKeygroup->level.onValueChange.connect( levelHandler, scope );
             pKeygroup->pan.onValueChange.connect( panHandler, scope );
@@ -134,7 +152,8 @@ namespace kick_ui
         if( pKeygroup && keys.size() )
         {
             muteGroup.setValue( pKeygroup->getNoteMuteGroup( keys[0] ), juce::dontSendNotification );
-            samplePlay.setSelected( (int)pKeygroup->getNoteSamplePlay( keys[0] ), juce::dontSendNotification );
+            auto mode = pKeygroup->getNoteSamplePlay(keys[0]);
+            samplePlay.setSelected(mode == mt::SamplePlayType::ONE_SHOT ? 0 : mode == mt::SamplePlayType::NOTE_ON ? 1 : 2, juce::dontSendNotification);
             layerPlay.setSelected( (int)pKeygroup->getNoteLayerPlay( keys[0] ), juce::dontSendNotification );
             outListBox.setSelected( pKeygroup->getOutput(), juce::dontSendNotification );
         }
@@ -145,6 +164,7 @@ namespace kick_ui
         if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
             auto padNum = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
+            if(keys.empty()) return;
             keys[0]     = padNum + mt::getAudioInterface().getBankOffset();
             refresh();
         }

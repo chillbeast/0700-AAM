@@ -25,8 +25,8 @@ namespace mt
 {
 
     /// @brief
-    ISynthObject::ISynthObject( AudIO::Design& D, int Polyphony, AudIO::BusType Type )
-        : AudIO::Object( 0, 2, 0 )
+    ISynthObject::ISynthObject( AudIO::Design& D, int Polyphony, AudIO::BusType Type, int Inputs )
+        : AudIO::Object( Inputs, 2, 0 )
         , AudIO::DawRouting( D, Type, AudIO::BusWidth::Stereo )
         , AudioDesign( D )
     {
@@ -56,8 +56,11 @@ namespace mt
 
     void ISynthObject::setProgram( MTIProgram* Program )
     {
+        soloConnection.disconnect();
         program = Program;
         master.attachTo( Program ? Program->getState() : juce::ValueTree{ IDs::PROGRAM } );
+        soloMuted = Program && Program->isMutedDueToSolo();
+        if(Program) soloConnection = Program->soloStateChanged.connect([this](bool muted) { soloMuted = muted; });
     }
 
     bool ISynthObject::isPlaying( int Note )
@@ -88,19 +91,20 @@ namespace mt
 
     ISynthVoice* ISynthObject::getFreeVoice( int Note, int Polyphony )
     {
-        if( CommonUtils::isValidMidiNote( Note ) )
+        if(!CommonUtils::isValidMidiNote(Note) || Polyphony < 1) return nullptr;
+        ISynthVoice* oldest = nullptr;
+        const bool sameNoteOnly = getNumPlaying(Note) >= Polyphony;
+        int active = 0; for(const auto& voice : voices) if(!voice->isFree()) ++active;
+        const bool programFull = active >= juce::jlimit(1, numPolyphony, master.poly());
+        for(auto& voice : voices)
         {
-            auto numPlaying = getNumPlaying( Note );
-            if( numPlaying < Polyphony )
-            { // Find free voice.
-                for( auto& it : voices )
-                    if( it->isFree() )
-                        return it->changeToSettingupAndReturn();
-            }
-            else
-            { // Steal voice.
-            }
+            if(!sameNoteOnly && !programFull && voice->isFree()) return voice->changeToSettingupAndReturn();
+            if(!voice->isFree() && (!sameNoteOnly || voice->getNote() == Note))
+                if(!oldest || (voice->isStopping() && !oldest->isStopping()) ||
+                    (voice->isStopping() == oldest->isStopping() && voice->getStartOrder() < oldest->getStartOrder())) oldest = voice.get();
         }
+        if(oldest) { oldest->stop(); return oldest->changeToSettingupAndReturn(); }
+
         return nullptr;
     }
 
@@ -118,6 +122,7 @@ namespace mt
 
     void ISynthObject::addVoiceForPlayback( ISynthVoice* Voice )
     {
+        if(Voice) Voice->setStartOrder(++nextVoiceOrder);
         playVoice( Voice );
     }
 
@@ -182,6 +187,7 @@ namespace mt
 
     void ISynthObject::process( AudIO::Buffer<float>& buffer )
     {
+        processInput(buffer); // Input/output graph buffers may alias; read input first.
         juce::AudioBuffer<float> bufferToFill( (float* const*)buffer.getOutputs(), buffer.getNumOutputChannels(), buffer.getBlockSize() );
         bufferToFill.clear();
 
@@ -213,6 +219,7 @@ namespace mt
 
     void ISynthObject::postProcess( juce::AudioBuffer<float>& buffer )
     {
+        if(soloMuted.load()) { buffer.clear(); return; }
         auto ns = buffer.getNumSamples();
         auto nc = buffer.getNumChannels();
 

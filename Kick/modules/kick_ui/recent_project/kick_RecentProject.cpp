@@ -75,6 +75,7 @@ namespace ui
 					{
 						header.setAutoLoadToggleState( true );
 						settings.projects.isAutoLoad = ( true );
+                        settings.projects.onLaunch = "Last Used";
 
 						header.setAutoLoadToggleState( settings.projects.isAutoLoad() );
 					}
@@ -82,6 +83,7 @@ namespace ui
                     {
                         header.setAutoLoadToggleState( false );
                         settings.projects.isAutoLoad = ( false );
+                        settings.projects.onLaunch = "Selector";
 
                         header.setAutoLoadToggleState( settings.projects.isAutoLoad() );
                     }
@@ -105,6 +107,7 @@ namespace ui
 
         newProj.onClick = [&]() {
             juce::String str = settings.projects.namePrefix();
+            if(settings.projects.namingStyle().equalsIgnoreCase("TIME STAMP")) str = juce::Time::getCurrentTime().formatted("%d%b%y_%H%M%S_").toUpperCase();
 
             auto& keyboard = ui::KickVirtualKeyBoard::getWithText( str );
             keyboard.show(
@@ -142,7 +145,7 @@ namespace ui
         auto       sepratorStr = juce::File::getSeparatorString();
         juce::File file        = getAppDirs( MTProjects ).getFullPathName() + sepratorStr + value;
         settings.projects.createProject( file );
-        loadProject( file );
+        ui::LoadProjectAndAnimation::getInstance().startCreating(file);
     }
 
     void RecentProject::sliderMoved( float )
@@ -470,14 +473,25 @@ namespace ui
             {
                 bFirstLaunch = false;
                 // Check if we have to auto load a project
-                if( settings.projects.isAutoLoad() )
+                const auto policy = settings.projects.onLaunch();
+                if(policy == "New Project")
+                {
+                    juce::String name = settings.projects.namePrefix().trim();
+                    if(settings.projects.namingStyle().equalsIgnoreCase("TIME STAMP")) name = juce::Time::getCurrentTime().formatted("%d%b%y_%H%M%S").toUpperCase();
+                    if(name.isEmpty()) name = "Untitled";
+                    name = juce::File::createLegalFileName(name);
+                    const auto target = getAppDirs(MTProjects).getNonexistentChildFile(name, {}, false);
+                    if(validateNewProjectName(target.getFileName())) ui::LoadProjectAndAnimation::getInstance().startCreating(target);
+                }
+                else if(policy == "Last Used" || settings.projects.isAutoLoad())
                 {
                     // Auto load project.
                     juce::String prevProj = settings.projects.currentProject();
                     if( prevProj.isNotEmpty() )
                     {
                         auto projFile = juce::File( prevProj );
-                        loadProject( projFile );
+                        if(projFile.exists()) loadProject(projFile);
+                        else mt::utils::showNotification("The last project is unavailable; choose another project");
                     }
                 }
             }

@@ -32,6 +32,7 @@ namespace mt
     class MTIProgram;
     static sigslot::signal<MTIProgram*> programNameChanged;
     static sigslot::signal<MTIProgram*> programBeingDeleted;
+    inline sigslot::signal<> programSoloChanged;
 
     const std::array<int, 128> defaultDrumColours = { contracts::DeviceControlContracts::PadColourRed, contracts::DeviceControlContracts::PadColourOrange1, contracts::DeviceControlContracts::PadColourOrange, contracts::DeviceControlContracts::PadColourPink,
                                                       contracts::DeviceControlContracts::PadColourNeutralWhite, contracts::DeviceControlContracts::PadColourRed, contracts::DeviceControlContracts::padColourDarkRed, contracts::DeviceControlContracts::PadColourOrange,
@@ -75,6 +76,7 @@ namespace mt
         std::function<void()>             onMuteChanged     = []() {};
         std::function<void()>             onOutChanged      = []() {};
         std::function<void( int, float )> onSendGainChanged = []( int, float ) {};
+        sigslot::signal<bool> soloStateChanged;
 
         // Index API's
         inline void setIndex( int Index ) { MTIProgramData::index = Index; };
@@ -105,6 +107,7 @@ namespace mt
         std::vector<juce::String> getSampleNames();
         inline int                getNumSamples() { return (int)iSampleMap.size(); }
         std::vector<int>          getAssignedNotes();
+        std::vector<int> getSampleKeys() const { std::vector<int> keys; for(const auto& entry : iSampleMap) keys.push_back(entry.first); return keys; }
 
         void addSample( int KeyNote, const juce::String& Sample, int Slice, int Layer );
         void removeSample( int KeyNote, int Layer );
@@ -112,6 +115,7 @@ namespace mt
 
         // Virtual functions...
         virtual void noteProcess( juce::Array<juce::MidiMessage>& Msgs );
+        void noteOffAll() override { releaseVelocities.fill(0); }
         virtual void refresh() {}
 
         std::array<int, 4> getSimultaneousNotePlay( int Note );
@@ -148,7 +152,7 @@ namespace mt
         bool                       IsInputMeteringEnabled() { return midiMeter.isEnabled(); };
         bool                       IsOutputMeteringEnabled() { return outMeterEnabled.load(); };
         void                       enableInputMetering( bool Enable ) { midiMeter.enable( Enable ); };
-        const MTMeterData&         readInMeter() const { return midiMeter.getMeter(); };
+        virtual const MTMeterData& readInMeter() const { return midiMeter.getMeter(); };
         virtual void               enableOutputMetering( bool Enable ) { outMeterEnabled = Enable; };
         virtual const MTMeterData& readOutMeter() const { return AudIO::_dummyMeter; };
         virtual void               processMidiMeter() { midiMeter.process(); }
@@ -212,8 +216,8 @@ namespace mt
         /// SOLO API's
         ///
         /// Program
-        bool        isMutedDueToSolo() { return !soloingPrograms.isZero() && !soloingPrograms[MTIProgramData::index]; }
-        static void resetSoloingPrograms() { soloingPrograms.clear(); }
+        bool isMutedDueToSolo() const { return soloCount.load() > 0 && !(soloMember.load() && soloEpochSeen.load() == soloEpoch.load()); }
+        static void resetSoloingPrograms();
 
         /// Program Note
         bool isNoteSolo( int Note ) { return soloingNotes[Note]; }
@@ -276,10 +280,7 @@ namespace mt
         virtual void                       valueTreePropertyChanged( juce::ValueTree& treeWhosePropertyHasChanged, const juce::Identifier& Property );
 
     private:
-        inline void soloChangeHandler( bool Solo )
-        {
-            soloingPrograms.setBit( MTIProgramData::index, Solo );
-        }
+        void soloChangeHandler(bool solo);
 
     protected:
         std::map<int, std::unique_ptr<MTISample>> iSampleMap;
@@ -291,8 +292,13 @@ namespace mt
 
     private:
         std::atomic<bool>       outMeterEnabled{ false };
+        std::array<int, 128> releaseVelocities{};
         juce::BigInteger        soloingNotes;
-        static juce::BigInteger soloingPrograms;
+        static std::atomic<int> soloCount;
+        static std::atomic<uint64_t> soloEpoch;
+        std::atomic<bool> soloMember{false};
+        std::atomic<uint64_t> soloEpochSeen{0};
+        sigslot::scoped_connection soloConnection;
 
         MTMidiMeter midiMeter{ 40 };
 

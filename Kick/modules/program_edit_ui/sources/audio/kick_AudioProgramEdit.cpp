@@ -13,10 +13,11 @@ namespace kick_ui
 
     void AudioProgramEdit::visibilityChanged()
     {
+        if(isVisible()) pAudio = dynamic_cast<mt::MTAudioProgram*>(ae.getProgram(ae.getSelectedProgram()));
         for( auto comp : getChildren() )
             comp->setVisible( isVisible() );
         if( isVisible() )
-            pAudio = dynamic_cast<mt::MTAudioProgram*>( ae.getProgram( ae.getSelectedProgram() ) );
+            audioPgmContent.refresh();
     }
 
 }

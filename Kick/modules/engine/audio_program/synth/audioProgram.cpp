@@ -28,22 +28,16 @@ namespace mt
 
     /// @brief
     AudioProgram::AudioProgram( AudIO::Design& D, const juce::String& Name, MTIProgram* PClip )
-        : ISynthObject( D, 1 )
+        : ISynthObject( D, 1, AudIO::BusType::Object, 2 )
     {
         setName( Name.toStdString() );
         setProgram( PClip );
 
-        // Pre-reseve Memory...
-        for( auto i = 0; i < getPolyphony(); ++i )
-            voices.emplace_back( std::make_unique<AVoice>( master ) );
-
-        ISynthObject::addVoices( voices );
     }
 
     AudioProgram::~AudioProgram()
     {
         setBypass( true );
-        voices.clear();
     }
 
     void AudioProgram::setProgram( MTIProgram* PAudio )
@@ -58,19 +52,39 @@ namespace mt
 
     void AudioProgram::noteOn( int Note, int Velocity )
     {
-        if( !pAudio || pAudio->isNoteEffectivelyMuted( Note ) )
-            return;
+        // Audio regions follow the track timeline, independently of pad MIDI.
+    }
 
-        auto& assetMgr = getAudioInterface().getAssetManager();
-        auto  slice    = assetMgr.getAssetSlice( "" ); // Source
+    void AudioProgram::initialize(uint32_t rate, uint32_t block)
+    {
+        inputBuffer.setSize(2, (int)block); inputBuffer.clear();
+    }
 
-        noteOff( Note );
-        if( auto voice = getFreeVoice( Note, 1 ) )
+    void AudioProgram::processInput(AudIO::Buffer<float>& buffer)
+    {
+        const int count = (int)buffer.getBlockSize();
+        const bool connected = inputConnected.load();
+        auto* left = connected ? buffer.getInputBuffer(0) : nullptr;
+        auto* right = connected ? buffer.getInputBuffer(1) : nullptr;
+        timeline.record(left, right, count, getSampleRate());
+        inputBuffer.clear();
+        if(left && right && count <= inputBuffer.getNumSamples())
         {
-            voice->setSlice( slice );
-            voice->noteOn( 0, 127 );
-            addVoiceForPlayback( voice );
+            inputMeter.processIn(buffer);
+            if(monitor.load())
+            {
+                inputBuffer.copyFrom(0, 0, left, count);
+                inputBuffer.copyFrom(1, 0, right, count);
+            }
         }
+    }
+
+    void AudioProgram::preProcess(juce::AudioBuffer<float>& output)
+    {
+        if(output.getNumSamples() <= inputBuffer.getNumSamples())
+            for(int channel = 0; channel < juce::jmin(2, output.getNumChannels()); ++channel)
+                output.addFrom(channel, 0, inputBuffer, channel, 0, output.getNumSamples());
+        timeline.render(output, getSampleRate(), master.pitchRatio.load());
     }
 
 };

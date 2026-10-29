@@ -35,6 +35,7 @@
 
 // Module source files...
 #include "engine/mt_audio_interface.cpp"
+#include "engine/mt_audio_performance.cpp"
 #include "engine/mt_audio_inserts_types.cpp"
 #include "engine/mt_audio_interface_types.cpp"
 #include "engine/mt_audio_interface_looper.cpp"

@@ -30,6 +30,7 @@ namespace mt
         using Ptr = juce::ReferenceCountedObjectPtr<ASound>;
 
         explicit ASound( const juce::String& File, juce::AudioFormatManager& FmtMgr, float UpSampleRate, double MaxLengthInSeconds = -1.0 );
+        ASound(juce::AudioFormatManager& FmtMgr, double SampleRate); // generated fallback click
 
         void setSound( const juce::String& File, double MaxLengthInSeconds );
 

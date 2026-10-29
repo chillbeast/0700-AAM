@@ -124,7 +124,7 @@ namespace kick_ui
         for( int i = 1; i <= pages; i++ )
             pagesData.push_back( juce::String( i ) );
 
-        page.setListOptions( pagesData );
+        page.setListOptions(pagesData, juce::jlimit(0, juce::jmax(0, pages - 1), page.getSelectedIndex()));
     }
 
     int StepSequencerTopControl::getTimeDivision()

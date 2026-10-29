@@ -138,8 +138,12 @@ namespace mt
         auto newProgram = manager.getProgramById( programId.get() );
         if( newProgram != program.load() )
         {
+            if(audioClock) audioClock->stop();
+            audioClock.reset(); audioClockReset = true;
+            if(auto* audio = dynamic_cast<MTAudioProgram*>(program.load())) audio->playbackStopped();
             stopAllMidiNotes();
             program.store( newProgram );
+            if(auto* audio = dynamic_cast<MTAudioProgram*>(newProgram)) audioClock = audio->createPlaybackClock();
             manager.triggerTrackProgramChanged( getIndex(), program.load() );
         }
     }
@@ -165,6 +169,8 @@ namespace mt
                 lengthChangeHandler();
             else if( Property == IDs::program )
                 progChangeHandler();
+            else if(Property == juce::Identifier("inputMonitor") && !(bool)TreeWhosePropertyHasChanged.getProperty("inputMonitor", true))
+                stopAllMidiNotes();
         }
     }
 
@@ -194,10 +200,12 @@ namespace mt
     void MTTrack::play()
     {
         const juce::ScopedLock guard(lock);
+        if(audioClock) audioClock->stop(); audioClockReset = true;
+        suppressRecordedUntil.clear();
         isPlaying = true;
         // The variables are cleared here and in stop as the workflow may be pause->playstart. if Ui calls stop and resume then it may lead to issues.
         trackPlayhead.clear();
-        trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() - 1 ) : 0;
+        trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() ) : 0;
         prevTick              = 0;
         scheduleStart         = true;
         tickCtr               = 0;
@@ -208,12 +216,15 @@ namespace mt
     void MTTrack::resume()
     {
         const juce::ScopedLock guard(lock);
+        audioClockReset = true;
         isPlaying = true;
     }
 
     void MTTrack::pause()
     {
         const juce::ScopedLock guard(lock);
+        if(audioClock) audioClock->stop();
+        if(auto* audio = dynamic_cast<MTAudioProgram*>(program.load())) audio->playbackStopped();
         isPlaying = false;
         stopAllMidiNotes();
     }
@@ -221,10 +232,12 @@ namespace mt
     void MTTrack::stop()
     {
         const juce::ScopedLock guard(lock);
+        if(audioClock) audioClock->stop(); audioClockReset = true;
+        if(auto* audio = dynamic_cast<MTAudioProgram*>(program.load())) audio->playbackStopped();
         stopAllMidiNotes();
         isPlaying = false;
         trackPlayhead.clear();
-        trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() - 1 ) : 0;
+        trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() ) : 0;
         prevTick              = 0;
         scheduleStart         = true;
         tickCtr               = 0;
@@ -235,12 +248,13 @@ namespace mt
     void MTTrack::seek( int posInTicks )
     {
         const juce::ScopedLock guard(lock);
+        if(audioClock) audioClock->stop(); audioClockReset = true;
         tickPos = juce::jmax(0, posInTicks);
         tickOffset = int64_t(tickPos) - int64_t(prevTick);
         scheduleStart = true;
         if( seq.isLooping.get() && lengthInTicks.load() > 0 )
             while( tickPos >= lengthInTicks.load() ) // This is cheap modulo
-                tickPos %= lengthInTicks.load();
+                tickPos = tickPos.load() % lengthInTicks.load();
 
         //// restrict the position between loop start and sequence length.
         //tickPos  = juce::jlimit<int>( 0, seq.getTicksUpto( getLength() ), posInTicks );
@@ -289,15 +303,26 @@ namespace mt
         int last               = seq.isLooping.get() ? juce::jmin<int>( getLength(), seq.getLoopEnd() ) : juce::jmin<int>( getLength(), seq.getLength() );
         if( ++trackPlayhead.bnb.bar % last == 0 )
         {
-            trackPlayhead.bnb.bar = trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() - 1 ) : 0;
+            trackPlayhead.bnb.bar = trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() ) : 0;
             trackPlayhead.loopCount++;
         }
+    }
+
+    juce::Range<int> MTTrack::getPlaybackLoopRange() const
+    {
+        const int length = juce::jmax(1, (int)lengthInTicks.load());
+        int start = seq.isLooping.get() ? (int)seq.getTicksUpto(juce::jmax(0, seq.getLoopStart())) : 0;
+        if(start >= length) start = 0; // shorter independent tracks keep their own cycle
+        const int end = seq.isLooping.get() ? juce::jmin(length, (int)seq.getTicksUpto(seq.getLoopEnd())) : length;
+        return {start, juce::jmax(start + 1, end)};
     }
 
     void MTTrack::fillMidiMessages( unsigned int tick, unsigned int PrevTick, int MidiChannel )
     {
         //juce::Logger::writeToLog( "prevTick, " + juce::String( PrevTick ) + "PresentTick, " + juce::String(tick));
 
+        const auto range = getPlaybackLoopRange();
+        const int loopStart = range.getStart(), loopLength = range.getLength();
         for( auto pos = scheduleStart ? PrevTick : PrevTick + 1; pos <= tick; pos++ )
         {
             while(!queuedNotes.empty() && queuedNotes.begin()->first <= pos)
@@ -305,9 +330,17 @@ namespace mt
                 midiMsgs.add(queuedNotes.begin()->second);
                 queuedNotes.erase(queuedNotes.begin());
             }
-            int posOnTrack = int((int64_t(pos) + tickOffset) % lengthInTicks.load());
+            const int64_t raw = int64_t(pos) + tickOffset - loopStart;
+            int posOnTrack = loopStart + int((raw % loopLength + loopLength) % loopLength);
             for( const auto& it : getNotesAtPos( posOnTrack ) )
             {
+                const auto key = std::make_pair(it.number, it.start);
+                auto guard = suppressRecordedUntil.find(key);
+                if(guard != suppressRecordedUntil.end())
+                {
+                    if(pos <= guard->second) continue; // don't echo a freshly quantized live hit
+                    suppressRecordedUntil.erase(guard);
+                }
                 int noteNo = getEffectiveNoteNo( it.number );
                 if( !isTrackEffectivelyMuted() && CommonUtils::isValidMidiNote( noteNo ) )
                 {
@@ -343,9 +376,7 @@ namespace mt
         auto pProgram = program.load();
         if( !pProgram || ( 0 == lengthInTicks.load() ) )
             return;
-
-        if( pProgram->isAudio() )
-            return;
+        if(pProgram->isAudio() && !isPlaying.load()) return;
 
         unsigned int diffTick = Tick - prevTick;
 
@@ -357,18 +388,33 @@ namespace mt
 
         const juce::ScopedLock sl( lock );
 
-        fillMidiMessages( Tick, prevTick, trackMidiOutChannel );
+        if(!pProgram->isAudio()) fillMidiMessages( Tick, prevTick, trackMidiOutChannel );
         scheduleStart = false;
 
         prevTick = Tick;
 
         if( tickPos >= lengthInTicks.load() )
         {
-            tickPos %= lengthInTicks.load();
+            tickPos = tickPos.load() % lengthInTicks.load();
             noteIdx = 0;
         }
 
+        if(seq.isLooping.get())
+        {
+            const auto range = getPlaybackLoopRange();
+            const int start = range.getStart(), span = range.getLength();
+            const auto raw = int64_t(Tick) + tickOffset - start;
+            tickPos = start + (unsigned)((raw % span + span) % span);
+        }
+
         updateTrackPlayhead( tickPos );
+        if(audioClock)
+        {
+            audioClock->update(tickPos.load(), seq.getBPM() * defaultPPQN / 60.0, getPlaybackLoopRange(), seq.isLooping.get(),
+                isTrackEffectivelyMuted(), getLevel() / 127.f, getPan(), audioClockReset);
+            audioClockReset = false;
+            if(auto* audio = dynamic_cast<MTAudioProgram*>(pProgram)) audio->applySendAutomation((int)tickPos.load());
+        }
         // add logic to compute normalized playhead position using lengthInTicks
         if( !midiMsgs.isEmpty() )
         {
@@ -376,6 +422,13 @@ namespace mt
             pProgram->noteProcess( midiMsgs );
             midiMsgs.clearQuick();
         }
+    }
+
+    void MTTrack::addRecordedNote(int note, int start, int length, int velocity, int guardTicks)
+    {
+        const juce::ScopedLock guard(lock);
+        addOrModifyNote(note, start, length, velocity);
+        suppressRecordedUntil[{note, start}] = uint64_t(prevTick) + juce::jmax(0, guardTicks);
     }
 
     int MTTrack::processIncomingMidiMessage( const juce::MidiMessage& Msg )
@@ -387,7 +440,7 @@ namespace mt
         // (instruments, held keygroups) sounding forever once the track is unmuted.
         const bool isRelease = Msg.isNoteOff() || Msg.isAllNotesOff() || Msg.isAllSoundOff() || Msg.isResetAllControllers()
             || (Msg.isControllerOfType(64) && Msg.getControllerValue() < 64);
-        if( pProgram && ( !isTrackEffectivelyMuted() || isRelease ) )
+        if( pProgram && ( (!isTrackEffectivelyMuted() && monitor.get()) || isRelease ) )
         {
             juce::Array<juce::MidiMessage> list;
 

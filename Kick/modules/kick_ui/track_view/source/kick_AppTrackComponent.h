@@ -56,22 +56,24 @@ protected:
 
 private:
     void updateThemeImages( bool loadOrUnload );
+    void refreshRecordingControls();
     void mouseDown( const juce::MouseEvent& e ) override;
 
     mt::MTAudioInterface&                   ae{ mt::getAudioInterface() };
     mt::MTITrackData*                       pTrack{ nullptr };
     std::shared_ptr<mt::Kick::ScopeTracker> scope;
+    std::shared_ptr<mt::Kick::ScopeTracker> recordingScope;
 
     int                    seq{ -1 };
     int                    track{ -1 };
     juce::String           selMidiPort{ "" };
-    const mt::MTMeterData* trkMeter;
+    const mt::MTMeterData* trkMeter{nullptr};
 
 private:
     ui::Kick2LineNameLabel                  name{ "" };
     ui::KickImageButton                     mute{ TRANS( "Mute" ) };
     ui::KickImageButton                     solo{ TRANS( "Solo" ) };
-    ui::KickRecordButton                    arm;
+    ui::KickButton                          arm{"ARM"};
     ui::KickImageButton                     monitor{ TRANS( "Monitor" ) };
     ui::KickMeterVerticalWithMarks          levelMeter;
     kick_ui::KickProgramSelectorWithDisplay selector{ false };

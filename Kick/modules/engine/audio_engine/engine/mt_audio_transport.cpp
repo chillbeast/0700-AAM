@@ -106,7 +106,7 @@ namespace mt
 
     int MTTempoSettings::getTicksPerQuantization() const
     {
-        return AudIO::ticksPerBeat( getQuantization(), defaultPPQN );
+        return getQuantizationLevel() == MTTimeBase::_1 ? getTicksPerBar() : AudIO::ticksPerBeat(getQuantization(), defaultPPQN);
     }
 
     int MTTempoSettings::getLengthInTicks() const
@@ -279,7 +279,12 @@ namespace mt
     MTTimeBase MTTempoMgr::getTimeBase( int Index ) { return getTempoSettings( Index ).getTimeBase(); }
 
     int MTTempoMgr::getBeatsPerBar( int Bar ) { return getTempoSettingsAtBar( Bar ).getNumerator(); }
-    int MTTempoMgr::getQuantizationPerBar( int Bar ) { return getTempoSettingsAtBar( Bar ).getQuantization(); }
+    int MTTempoMgr::getQuantizationPerBar(int bar)
+    {
+        const auto& tempo = getTempoSettingsAtBar(bar);
+        const int ticks = tempo.getTicksPerBar(), grid = juce::jmax(1, tempo.getTicksPerQuantization());
+        return juce::jmax(1, (ticks + grid - 1) / grid);
+    }
 
     int MTTempoMgr::getTicksPerBeat( int Bar ) { return getTempoSettingsAtBar( Bar ).getTicksPerBeat(); }
     int MTTempoMgr::getTicksPerBar( int Bar ) { return getTempoSettingsAtBar( Bar ).getTicksPerBar(); }

@@ -79,6 +79,9 @@ namespace kick_ui
 
         addComponent( lfoType, 0, 0 );
         addComponent( rate, 0, 2 );
+        enabled.setClickingTogglesState(true); enabled.setComponentID("lfo-tab-on"); addComponent(enabled, 0, 3);
+        enabled.onClick = [&] { if(pKeyGroup && !keys.empty()) pKeyGroup->setLFOEnabled(keys[0], enabled.getToggleState()); };
+
         //addComponent( layer4, 1, 3 );
 
         addComponent( pitch, 1, 0 );
@@ -144,6 +147,7 @@ namespace kick_ui
         if( pKeyGroup && keys.size() )
         {
             lfoType.setSelected( pKeyGroup->getLFOType( keys[0] ), juce::dontSendNotification );
+            enabled.setToggleState(pKeyGroup->getLFOEnabled(keys[0]), juce::dontSendNotification);
             rate.setValue( pKeyGroup->getLFOFrequency( keys[0] ), juce::dontSendNotification );
             pitch.setValue( pKeyGroup->getLFOPitch( keys[0] ), juce::dontSendNotification );
             filter.setValue( pKeyGroup->getLFOFilter( keys[0] ), juce::dontSendNotification );
@@ -164,7 +168,10 @@ namespace kick_ui
         if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
             auto padNum = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
-            keys[0]     = padNum + mt::getAudioInterface().getBankOffset();
+            if(keys.empty()) return;
+            const int mapped = pKeyGroup ? pKeyGroup->getZoneKeyForNote(padNum + mt::getAudioInterface().getBankOffset()) : -1;
+            if(mapped < 0) return;
+            keys[0] = mapped;
             refresh();
         }
     }

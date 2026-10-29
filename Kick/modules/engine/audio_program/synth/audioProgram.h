@@ -21,6 +21,7 @@
 #pragma once
 
 #include "iSynthObject.h"
+#include "audio_timeline.h"
 
 namespace mt
 {
@@ -34,10 +35,18 @@ namespace mt
 
         void setProgram( MTIProgram* PClip ) override;
         void noteOn( int Note, int Velocity ) override;
+        void processInput(AudIO::Buffer<float>&) override;
+        void preProcess(juce::AudioBuffer<float>&) override;
+        void initialize(uint32_t rate, uint32_t block) override;
+        AudioTimeline timeline;
+        std::atomic<bool> monitor{false}, inputConnected{false};
+        const MTMeterData& readInputMeter() { return inputConnected.load() ? inputMeter.getMeterIn(inputMeterData) : AudIO::_dummyMeter; }
 
     private:
         MTAudioProgram*                           pAudio{ nullptr };
-        std::vector<std::unique_ptr<ISynthVoice>> voices;
+        juce::AudioBuffer<float> inputBuffer;
+        AudIO::LevelMeter inputMeter;
+        MTMeterData inputMeterData;
     };
 
 };

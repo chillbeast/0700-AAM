@@ -16,12 +16,14 @@ namespace ui
         }
 
         void startLoading( juce::File project );
+        void startCreating(juce::File project);
 
     private:
         LoadProjectAndAnimation();
 
         mt::MTAudioInterface& ae{ mt::getAudioInterface() };
         juce::File            proj;
+        bool createNew{false};
         void                  run() override;
         void                  onProjectLoaded( juce::File file ) override;
     };

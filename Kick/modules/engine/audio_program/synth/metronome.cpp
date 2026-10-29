@@ -52,6 +52,7 @@ namespace mt
     {
         auto path  = getAppDirs( MTAssets ).getChildFile( File );
         auto sound = getAudioSoundCache().getOrLoadMetronomeSound( path.getFullPathName() );
+        if(!sound || !sound->isValid()) sound = getAudioSoundCache().getBuiltinClick();
         slice.setSource( sound );
     }
 

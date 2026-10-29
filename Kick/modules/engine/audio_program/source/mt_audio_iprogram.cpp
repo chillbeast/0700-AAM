@@ -23,7 +23,21 @@ namespace mt
 {
     // Static variables..
     static std::atomic_int __progCounter = 0;
-    juce::BigInteger       MTIProgram::soloingPrograms;
+    std::atomic<int> MTIProgram::soloCount{0};
+    std::atomic<uint64_t> MTIProgram::soloEpoch{1};
+
+    void MTIProgram::resetSoloingPrograms()
+    {
+        soloEpoch.fetch_add(1); soloCount.store(0); programSoloChanged();
+    }
+
+    void MTIProgram::soloChangeHandler(bool solo)
+    {
+        const auto epoch = soloEpoch.load();
+        if(soloEpochSeen.exchange(epoch) != epoch) soloMember.store(false);
+        if(soloMember.exchange(solo) != solo) soloCount.fetch_add(solo ? 1 : -1);
+        programSoloChanged();
+    }
 
     ///
     /// MTI Program...
@@ -43,6 +57,7 @@ namespace mt
         if( vTree.getProperty( IDs::name ).toString().isEmpty() )
             vTree.setProperty( IDs::name, "Program " + juce::String( __progCounter ).paddedLeft( '0', 2 ), um );
 
+        soloConnection = programSoloChanged.connect([this] { soloStateChanged(isMutedDueToSolo()); });
         soloChangeHandler( MTIProgramData::solo.get() );
 
         iSampleVTree = vTree.getOrCreateChildWithName( IDs::CLIPS, nullptr );
@@ -50,6 +65,7 @@ namespace mt
 
     MTIProgram::~MTIProgram()
     {
+        soloConnection.disconnect(); soloChangeHandler(false);
         vTree.removeListener( this );
     }
 
@@ -275,6 +291,7 @@ namespace mt
 
                 if( it.isNoteOn() )
                 {
+                    releaseVelocities[(size_t)noteNo] = (int)midiLevel;
                     switch( playType )
                     {
                         case SamplePlayType::ONE_SHOT:
@@ -298,10 +315,12 @@ namespace mt
                         case SamplePlayType::ONE_SHOT: // Nothing to be done here.
                             break;
                         case SamplePlayType::NOTE_OFF:
-                            noteOn( noteNo, midiLevel );
+                            if(releaseVelocities[(size_t)noteNo] > 0)
+                                noteOn(noteNo, midiLevel > 0 ? (int)midiLevel : releaseVelocities[(size_t)noteNo]);
                             //DBG( "Note On----" << noteNo );
                             break;
                     }
+                    releaseVelocities[(size_t)noteNo] = 0;
                 }
             }
             else if( it.isController() )
@@ -314,6 +333,7 @@ namespace mt
                     case 1: // Modulation Wheel
                         modWheel( controllerValue );
                         break;
+                    case 120: // All Sound Off
                     case 123: // All Notes Off
                         noteOffAll();
                         break;
@@ -723,8 +743,8 @@ namespace mt
     void MTIProgram::setLayerSource( int Note, int Layer, const juce::String& Value ) { getLayer( Note, Layer )->source = Value; }
     void MTIProgram::setLayerSlice( int Note, int Layer, int Value ) { getLayer( Note, Layer )->slice = Value; }
     void MTIProgram::setLayerOffset( int Note, int Layer, int Value ) { getLayer( Note, Layer )->offset = Value; }
-    void MTIProgram::setLayerVelocityStart( int Note, int Layer, int Value ) { getLayer( Note, Layer )->velStart = Value; }
-    void MTIProgram::setLayerVelocityEnd( int Note, int Layer, int Value ) { getLayer( Note, Layer )->velEnd = Value; }
+    void MTIProgram::setLayerVelocityStart(int note, int layer, int value) { if(CommonUtils::isValidMidiNote(note) && juce::isPositiveAndBelow(layer, MAX_LAYERS)) if(auto* data = getLayer(note, layer)) { data->velStart = juce::jlimit(0, 127, value); if(data->velEnd.get() < data->velStart.get()) data->velEnd = data->velStart.get(); } }
+    void MTIProgram::setLayerVelocityEnd(int note, int layer, int value) { if(CommonUtils::isValidMidiNote(note) && juce::isPositiveAndBelow(layer, MAX_LAYERS)) if(auto* data = getLayer(note, layer)) { data->velEnd = juce::jlimit(0, 127, value); if(data->velStart.get() > data->velEnd.get()) data->velStart = data->velEnd.get(); } }
     void MTIProgram::setLayerTailStart( int Note, int Layer, int milliSec ) { getLayer( Note, Layer )->tailStart = milliSec; }
     void MTIProgram::setLayerTailLength( int Note, int Layer, int milliSec ) { getLayer( Note, Layer )->tailLength = milliSec; }
 }

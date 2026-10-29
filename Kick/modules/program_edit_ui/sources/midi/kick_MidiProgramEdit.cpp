@@ -33,6 +33,7 @@ namespace kick_ui
                 name = "CC" + juce::String( sliderIdx );
 
             it.setTitle( name );
+            it.setComponentID("midi-cc-" + juce::String(sliderIdx));
             it.setRange( MIDI::MIN, MIDI::MAX, 1 );
             it.showTitleAndValue( true, juce::Slider::TextBoxBelow );
             it.setTitleJustification( juce::Justification::centredTop );
@@ -74,14 +75,15 @@ namespace kick_ui
 
         // Program change handler...
         onProgramChanged = [&]() {
-            DBG( "Program selection changed..." );
+            state = pIProg && pIProg->isMidi() ? pIProg->getState() : juce::ValueTree{};
             juce::String id;
             int          idx = 0;
             for( auto& it : attachments )
             {
                 id = "CC" + juce::String( idx++ );
-                it->resetAttachment( state.getPropertyAsValue( id, nullptr ) );
+                it->resetAttachment(state.isValid() ? state.getPropertyAsValue(id, pIProg->getUndoManager()) : juce::Value{});
             }
+            setEnabled(state.isValid());
         };
 
         ui::connectTheme( *this, [&]() {
@@ -103,8 +105,14 @@ namespace kick_ui
     {
     }
 
-    void MidiProgramEdit::handleCommand( CPktMgr::HWMsg_t& )
+    void MidiProgramEdit::handleCommand( CPktMgr::HWMsg_t& message )
     {
+        if(!state.isValid() || !contracts::DclContractsHelper::isKnobMessage(message)) return;
+        const int knob = contracts::DclContractsHelper::getKnobCode(message) - contracts::DeviceControlContracts::EN_KNOB_1;
+        if(!juce::isPositiveAndBelow(knob, 16)) return;
+        for(int page = 0; page < 8; ++page)
+            if(selectors[page].getToggleState())
+                sliders[page * 16 + knob].knobRotated(contracts::DclContractsHelper::getKnobValue(message));
     }
 
     void MidiProgramEdit::timerCallback()

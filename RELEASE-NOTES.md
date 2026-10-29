@@ -1,5 +1,22 @@
 # Community simulator releases
 
+## v0.1.5
+
+Windows x64 and Linux x86_64 community prerelease with the accumulated timing, instrument, mixer, audio and project workflow repairs. Earlier tags and downloads are preserved.
+
+- Record MIDI with distinct REC replace / OVERDUB behavior, saved count-in and a generated metronome fallback. Apply Timing Correct, swing and editable meters; use Tap Tempo, Note Repeat/Latch, velocity 16 Levels and fixed Full/Half Level. Correct step-page editing, transport reset and sequence-end handling.
+- Connect drum/keygroup filters, amplitude/filter/pitch envelopes and LFOs to saved controls. Layer overlapping keygroup zones with independent release ownership and voice limits. Expose velocity bounds; correct source-rate assignment, gain/pan and modulation phase handling.
+- Connect all MIDI CC sliders, KEY TRACK, return/output solo, mixer Q-links and a selected-output sample-peak limiter. Program solo now uses object membership and immediately gates sustained output.
+- Route selected audio inputs to ARM/MONITOR and bounded one-pass audio recording. Commit checked 24-bit WAV takes after count-in; preserve outside audio during undoable REC replacement and add overlapping takes with OVERDUB.
+- Play timed regions on independent track clocks. Use Pencil, Copy/Paste, Split/Cut, mute/level/reverse/tuning/fades and all seven audio automation lanes. Preserve source bounds and fade timing across edits; restore manual send levels on stop.
+- Apply new-project tempo, meter, bars, sequence/track counts and musical key. Restore per-project autosave settings without opening Preferences and keep preference saving independent. Replace XML through a checked temporary file; reject corrupt loads before closing the current project.
+- Honor Selector / New Project / Last Used launch policies, avoid name collisions and retain the selector for missing last projects. Detach stale track controls before project close; fix input notification duplication and editor/signal lifetime errors.
+- Update the README, manual and capability inventory. The 166 groups now comprise 130 Present, 19 Partial, 15 Missing and two Unverified, including eight community extensions. The inventory describes implemented paths and is not a hardware completion percentage.
+
+Validation (2026-10-29): 496 engine checks pass on Windows Debug, AddressSanitizer and no-ASIO Release, and native Linux Release. Both layouts pass 23 audio-workflow, 15 instrument, 16 program/mixer and 25 timing/control UI checks on all four configurations. Separate-process project/startup checks pass all four launch cases, restored autosave, name collisions and visible-project close (21 assertions plus five fixture checks per configuration). The existing 71-check MIDI/controller/startup suites pass on Windows ASan/Release and Linux. All nine broader UI cases pass on Windows Release and Linux, including three panel runs at 227 assertions each. All final test processes exit 0 with no AddressSanitizer reports. Windows/native Linux contents match across 131 changed C++ files, two CMake files and the community version file after line-ending normalization. The final public-load directory guard was checked with the 26-test project suite on all four configurations after the full regression runs; it rejects a directory collision before closing the active project.
+
+Remaining work includes sample Pitch Shift/Time Stretch/Bit Reduce and BPM tools, rendered bounce/Song export and Song-to-Sequence, global automation capture, pitch-based 16 Levels/repeated Pad Perform chords, audio WARP, XY FX, pad-specific routing/meters, quantized mutes and resource/device acceptance. Timing follows the existing tick/audio-block path; sample accuracy and physical ARM/CV/MIDI/USB/updater behavior are not certified. See [the inventory](FEATURE-INVENTORY.md) and [repair records](AUDIT-FIXES.md) for specific limits.
+
 ## v0.1.4
 
 Windows x64 and Linux x86_64 community simulator release with MIDI controller learn, input/startup repairs and faster MIDI filtering. Earlier release tags and downloads remain available.

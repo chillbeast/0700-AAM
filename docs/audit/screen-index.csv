@@ -1,35 +1,35 @@
 screen_id,registration,component,registration_line,note
 Invalid,not registered in KickHome,,,may be a reserved ID or separately hosted component; not automatically a missing user feature
-HomeOptions,registered,AppMenuOptions,222,screen exists; individual actions require capability inventory
-HomeListView,registered,AppMainmode,217,screen exists; individual actions require capability inventory
-HomeGridView,registered,AppGrid,218,screen exists; individual actions require capability inventory
-HomeSequencerView,registered,StepSequencer,219,screen exists; individual actions require capability inventory
-HomeXYView,registered,XyFxView,220,screen exists; individual actions require capability inventory
-HomePreferencesView,registered,Settings,221,screen exists; individual actions require capability inventory
+HomeOptions,registered,AppMenuOptions,227,screen exists; individual actions require capability inventory
+HomeListView,registered,AppMainmode,222,screen exists; individual actions require capability inventory
+HomeGridView,registered,AppGrid,223,screen exists; individual actions require capability inventory
+HomeSequencerView,registered,StepSequencer,224,screen exists; individual actions require capability inventory
+HomeXYView,registered,XyFxView,225,screen exists; individual actions require capability inventory
+HomePreferencesView,registered,Settings,226,screen exists; individual actions require capability inventory
 HomePreferences,not registered in KickHome,,,may be a reserved ID or separately hosted component; not automatically a missing user feature
-MenuSampleEdit,registered,SampleEditor,223,screen exists; individual actions require capability inventory
-MenuProgramEdit,registered,ProgramEdit,224,screen exists; individual actions require capability inventory
-MenuSampler,registered,Sampler,225,screen exists; individual actions require capability inventory
-MenuLooper,registered,Looper,226,screen exists; individual actions require capability inventory
-MenuPadMute,registered,KickPadMute,227,screen exists; individual actions require capability inventory
-MenuTrackMute,registered,KickTrackMute,228,screen exists; individual actions require capability inventory
-MenuPadMixer,registered,PadMixer,229,screen exists; individual actions require capability inventory
-MenuChannelMixer,registered,ChannelMixer,230,screen exists; individual actions require capability inventory
-MenuKnobEdit,registered,KnobEdit,231,screen exists; individual actions require capability inventory
-MenuListEdit,registered,ListEditMode,232,screen exists; individual actions require capability inventory
-MenuPadPerform,registered,PadPerform,233,screen exists; individual actions require capability inventory
-MenuMidiControl,registered,MidiControl,234,screen exists; individual actions require capability inventory
-MenuFileBrowser,registered,ui::FileBrowser,235,screen exists; individual actions require capability inventory
-MenuNextSequence,registered,KickNextSequenceMode,236,screen exists; individual actions require capability inventory
-MenuSong,registered,KickSongMode,237,screen exists; individual actions require capability inventory
-MenuColorEdit,registered,KickPadColorMode,238,screen exists; individual actions require capability inventory
-MenuAssignSample,registered,AppAssignSample,239,screen exists; individual actions require capability inventory
-RecentProject,registered,ui::RecentProject,195,screen exists; individual actions require capability inventory
+MenuSampleEdit,registered,SampleEditor,228,screen exists; individual actions require capability inventory
+MenuProgramEdit,registered,ProgramEdit,229,screen exists; individual actions require capability inventory
+MenuSampler,registered,Sampler,230,screen exists; individual actions require capability inventory
+MenuLooper,registered,Looper,231,screen exists; individual actions require capability inventory
+MenuPadMute,registered,KickPadMute,232,screen exists; individual actions require capability inventory
+MenuTrackMute,registered,KickTrackMute,233,screen exists; individual actions require capability inventory
+MenuPadMixer,registered,PadMixer,234,screen exists; individual actions require capability inventory
+MenuChannelMixer,registered,ChannelMixer,235,screen exists; individual actions require capability inventory
+MenuKnobEdit,registered,KnobEdit,236,screen exists; individual actions require capability inventory
+MenuListEdit,registered,ListEditMode,237,screen exists; individual actions require capability inventory
+MenuPadPerform,registered,PadPerform,238,screen exists; individual actions require capability inventory
+MenuMidiControl,registered,MidiControl,239,screen exists; individual actions require capability inventory
+MenuFileBrowser,registered,ui::FileBrowser,240,screen exists; individual actions require capability inventory
+MenuNextSequence,registered,KickNextSequenceMode,241,screen exists; individual actions require capability inventory
+MenuSong,registered,KickSongMode,242,screen exists; individual actions require capability inventory
+MenuColorEdit,registered,KickPadColorMode,243,screen exists; individual actions require capability inventory
+MenuAssignSample,registered,AppAssignSample,244,screen exists; individual actions require capability inventory
+RecentProject,registered,ui::RecentProject,198,screen exists; individual actions require capability inventory
 EditProgram,not registered in KickHome,,,may be a reserved ID or separately hosted component; not automatically a missing user feature
-SWUpdateView,registered,SWUpdateView,240,screen exists; individual actions require capability inventory
-SWUpdateWindow,registered,SWUpdateScreen,241,screen exists; individual actions require capability inventory
-ProcessEdit,registered,SampleProcess,242,screen exists; individual actions require capability inventory
-CVClib,registered,CVClib,243,screen exists; individual actions require capability inventory
+SWUpdateView,registered,SWUpdateView,245,screen exists; individual actions require capability inventory
+SWUpdateWindow,registered,SWUpdateScreen,246,screen exists; individual actions require capability inventory
+ProcessEdit,registered,SampleProcess,247,screen exists; individual actions require capability inventory
+CVClib,registered,CVClib,248,screen exists; individual actions require capability inventory
 SystemResources,not registered in KickHome,,,may be a reserved ID or separately hosted component; not automatically a missing user feature
-Inserts,registered,Inserts,244,screen exists; individual actions require capability inventory
+Inserts,registered,Inserts,249,screen exists; individual actions require capability inventory
 Temp,not registered in KickHome,,,may be a reserved ID or separately hosted component; not automatically a missing user feature

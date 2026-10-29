@@ -52,6 +52,8 @@ namespace mt
         void addListener( MTAudioInterfaceListener* l );
         void removeListener( MTAudioInterfaceListener* l );
         void removeAllListeners() { listeners.clear(); }
+        std::function<void(const MTSelected&, const juce::MidiMessage&)> liveMidiReceived;
+        std::function<void()> externalMidiStop;
 
         // Project API's..
         bool isProjectLoaded() const noexcept { return projectLoaded; };

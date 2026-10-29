@@ -21,31 +21,15 @@
 
 #pragma once
 
+#include "../common/kick_SampleVoiceEditor.h"
 namespace kick_ui
 {
-    class DPEnvelopes : public ui::KickGrid
-        , public DrumInterface
+    class DPEnvelopes : public SampleVoiceEditor, public DrumInterface
     {
     public:
-        DPEnvelopes( std::vector<int>& Pads, mt::MTDrumProgram*& PDrum );
-        ~DPEnvelopes() = default;
-
-        void refresh() override;
-        void handleCommand( CPktMgr::HWMsg_t& ) override;
-        void refreshPads();
-
-    private:
-        std::vector<int>&   pads;
-        mt::MTDrumProgram*& pDrum;
-
-        std::array<ui::KickListBox, 3> env;
-
-        std::array<ui::KickRotary, 3> a;
-        std::array<ui::KickRotary, 3> d;
-        std::array<ui::KickRotary, 3> h;
-        std::array<ui::KickRotary, 3> s;
-        std::array<ui::KickRotary, 3> dep;
-
-        void visibilityChanged() override;
+        DPEnvelopes(std::vector<int>& Pads, mt::MTDrumProgram*& Program);
+        void refresh() override { SampleVoiceEditor::refresh(); }
+        void refreshPads() { refresh(); }
+        void handleCommand(CPktMgr::HWMsg_t& Message) override { SampleVoiceEditor::handleCommand(Message); }
     };
 }

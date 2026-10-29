@@ -31,11 +31,22 @@ namespace mt
     {
         save();
     }
-    bool KickXML::autoSave{ true };
-    int  KickXML::autoSaveTimeOutInMS{ 1500 };
+    void KickXML::setAutoSave(bool enabled)
+    {
+        autoSave = enabled;
+        if(id == IDs::PREFERENCES) return;
+        timer.stopTimer(); cancelPendingUpdate();
+        if(enabled && dirty) timer.startTimer(autoSaveTimeOutInMS);
+    }
+
+    void KickXML::setAutoSaveTime(int milliseconds)
+    {
+        autoSaveTimeOutInMS = juce::jlimit(50, 3600000, milliseconds);
+        if(id != IDs::PREFERENCES && autoSave && dirty) timer.startTimer(autoSaveTimeOutInMS);
+    }
     void KickXML::valueTreeChanged()
     {
-        auto xml = vt.toXmlString();
+        dirty = true;
         if( vt.getType() == IDs::PREFERENCES )
             timer.startTimer( prefAutoSaveTimeOutInMS );
         else
@@ -51,6 +62,7 @@ namespace mt
     void KickXML::handleAsyncUpdate()
     {
         timer.stopTimer();
+        if(id != IDs::PREFERENCES && !autoSave) return;
         save();
     }
 
@@ -58,28 +70,23 @@ namespace mt
     {
         juce::ScopedLock l( lock );
 
-        // Close if already opened...
+        const auto target = resolveFile(XMLFIle, extn);
+        if(target.isDirectory()) return {};
+        juce::ValueTree next;
+        if(target.existsAsFile() && target.getSize() > 0)
+        {
+            next = juce::ValueTree::fromXml(target.loadFileAsString());
+            if(!next.hasType(id)) return {};
+        }
+        else
+        {
+            next = juce::ValueTree{id}; next.setProperty(IDs::manufacturer, __manufacturer, nullptr); next.setProperty(IDs::version, version, nullptr);
+            if(target.getParentDirectory().createDirectory().failed()) return {};
+            juce::TemporaryFile temporary(target);
+            if(!writeDocument(temporary.getFile(), next.toXmlString()) || !temporary.overwriteTargetFileWithTemporary()) return {};
+        }
         close();
-
-        xmlFileDir    = XMLFIle.exists() ? XMLFIle.isDirectory() ? XMLFIle : XMLFIle.getParentDirectory() : XMLFIle;
-        auto fileName = xmlFileDir.getFileName() + extn;
-        xmlFile       = xmlFileDir.getChildFile( fileName );
-
-        if( !xmlFile.exists() )
-        {
-            // Create.
-            xmlFile.create();
-        }
-        if( xmlFile.getSize() == 0 )
-        {
-            // Create basic structure,
-            vt = juce::ValueTree{ id };
-            vt.setProperty( IDs::manufacturer, __manufacturer, nullptr );
-            vt.setProperty( IDs::version, version, nullptr );
-            save();
-        }
-        // Load.
-        vt = juce::ValueTree::fromXml( xmlFile.loadFileAsString() );
+        xmlFile = target; xmlFileDir = target.getParentDirectory(); vt = next; dirty = false; lastSaveSuccessful = true;
 
         onLoad(); // Invoke callback.
         return vt;
@@ -87,19 +94,28 @@ namespace mt
 
     void KickXML::save()
     {
-        if( xmlFile.existsAsFile() )
+        juce::ScopedLock l(lock);
+        if(xmlFile == juce::File() || xmlFile.isDirectory() || !vt.hasType(id)) { lastSaveSuccessful = false; return; }
+        const auto xml = vt.toXmlString().replace("\r\n", "\n");
+        if(xmlFile.existsAsFile() && xmlFile.loadFileAsString() == xml)
         {
-            juce::ScopedLock l( lock );
-            // Save Program...
-            auto xml  = vt.toXmlString();
-            auto fxml = xmlFile.loadFileAsString();
-            if( fxml.compare( xml ) )
-                xmlFile.replaceWithText( xml );
+            lastSaveSuccessful = true; dirty = false; return;
         }
+        juce::TemporaryFile temporary(xmlFile);
+        lastSaveSuccessful = writeDocument(temporary.getFile(), xml) && temporary.overwriteTargetFileWithTemporary();
+        if(lastSaveSuccessful) dirty = false;
+    }
+
+    bool KickXML::writeDocument(const juce::File& file, const juce::String& xml)
+    {
+        auto stream = file.createOutputStream(); if(!stream) return false;
+        const bool written = stream->writeText(xml, false, false, "\n"); stream->flush();
+        return written && stream->getStatus().wasOk();
     }
 
     void KickXML::close()
     {
+        timer.stopTimer(); cancelPendingUpdate();
         save();
         juce::ScopedLock l( lock );
 

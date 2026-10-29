@@ -48,7 +48,7 @@ namespace mt
         void noteOn( int Note, int Velocity ) override { drum->noteOn( Note, Velocity ); };
         void noteOff( int Note ) override { drum->noteOff( Note ); };
         void noteOff( std::vector<int>& Notes ) override { drum->noteOff( Notes ); };
-        void noteOffAll() override { drum->noteOffAll(); };
+        void noteOffAll() override { MTIProgram::noteOffAll(); drum->noteOffAll(); };
         void noteMute( int Note, bool Mute ) override { drum->noteMute( Note, Mute ); };
         void noteReset( int Note ) override { drum->noteReset( Note ); };
         void noteReset( std::vector<int>& Notes ) override { drum->noteReset( Notes ); };

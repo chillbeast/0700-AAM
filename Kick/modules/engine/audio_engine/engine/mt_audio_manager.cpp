@@ -50,6 +50,11 @@ namespace mt
 
         // Metronome object...
         _metronome = std::make_unique<MTMetronome>( engine, getSettings().metronome.vTree );
+        _metronome->shouldPlay = [this] {
+            const auto mode = getSettings().metronome.mode();
+            return isPlaying() && (mode == MTMetronomeMode::MET_RECORD_PLAY
+                || (mode == MTMetronomeMode::MET_RECORD ? isRecording() : !isRecording()));
+        };
 
         // Initialize Audio device...
         juce::MessageManager::callAsync( [&]() {
@@ -67,6 +72,7 @@ namespace mt
         // MIDI messages handler
 
         auto midiMesageHandler = [&]( const MTMidiMessage& Msg ) {
+            const juce::ScopedLock guard(getSequenceLock());
             //String messageText;
             //messageText << "[" << Msg.source->getName() << "] : " << Msg.message.getDescription() << "\n";
             //DBG( messageText );
@@ -81,7 +87,7 @@ namespace mt
                 if(!external || !selectedInput) return;
                 if(!clock.isExternalClockSync()) clock.setClockSyncMode(CMidiClock::SyncMode::EXTERNAL_CLOCK);
                 if(msg.isMidiClock()) clock.tickExternal(Msg.receivedAtMilliseconds);
-                else if(msg.isMidiStop()) pause();
+                else if(msg.isMidiStop()) { if(externalMidiStop) externalMidiStop(); else pause(); }
                 else if(msg.isMidiStart()) { stop(); play(selected.sequence); clock.start(true); }
                 else { resume(selected.sequence); clock.start(false); }
             }
@@ -93,6 +99,11 @@ namespace mt
                 {
                     seq->forAllTracks( [&]( MTTrack* T ) {
                         T->processIncomingMidiMessage( Msg );
+                        if(liveMidiReceived && T->isMidiInAllowed(Msg.sourceName, msg.getChannel()))
+                        {
+                            auto target = selected; target.track = T->getIndex();
+                            liveMidiReceived(target, msg);
+                        }
                     } );
                 }
             }
@@ -168,11 +179,17 @@ namespace mt
     ////////////////////////////
     bool MTAudioManager::loadProject( juce::File& ProjectFile )
     {
+        if(ProjectFile.existsAsFile() && !ProjectFile.hasFileExtension(__projectFileExtension)) return false;
+        const auto candidate = KickXML::resolveFile(ProjectFile, __projectFileExtension);
+        if(candidate.isDirectory()) return false;
+        if(candidate.existsAsFile() && candidate.getSize() > 0 && !juce::ValueTree::fromXml(candidate.loadFileAsString()).hasType(IDs::ROOT)) return false;
+        if(projectLoaded) { projectManager::save(); if(!projectManager::wasLastSaveSuccessful()) return false; }
         //DBG( "LP: Enter FM: " << engine.getFeeMemory() );
         closeProject();
         //DBG( "LP: FM2: " << engine.getFeeMemory() );
         undoManager.clearUndoHistory();
         vTree = projectManager::loadOrCreate( ProjectFile );
+        if(!vTree.isValid()) return false;
 
 #if defined( USE_VALUE_TREE_DEBUGGER ) && ( USE_VALUE_TREE_DEBUGGER > 0 )
         debugger.setSource( vTree );
@@ -260,7 +277,7 @@ namespace mt
     bool MTAudioManager::saveProject()
     {
         projectManager::save();
-        return true;
+        return projectManager::wasLastSaveSuccessful();
     }
     ////////////////////////////
     //// Undo/Redo..

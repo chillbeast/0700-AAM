@@ -48,7 +48,7 @@ namespace kick_ui
         void mouseDown( const juce::MouseEvent& e ) override;
     };
 
-    class AppStatusbar : public juce::Component
+    class AppStatusbar : public juce::Component, private juce::Timer
     {
     public:
         ~AppStatusbar() = default;
@@ -56,6 +56,7 @@ namespace kick_ui
         static AppStatusbar& Instance();
 
         void setBoxInfo( juce::String );
+        void stopUpdates() { stopTimer(); }
 
     private:
         mt::MTPlayhead&   playHead{ mt::getAudioInterface().getPlayhead() };
@@ -68,6 +69,8 @@ namespace kick_ui
         AppStatusbar();
 
         bool init{ false };
+        int previousCountIn{0};
+        void timerCallback() override;
 
         void paint( juce::Graphics& g ) override;
         void resized() override;

@@ -193,6 +193,9 @@ namespace AudIO
             case BusOrChain::kParamStereo:
                 m_downmixStereoToMono = ( value > 0.5f ) ? false : true;
                 break;
+            case BusOrChain::kParamLimiter:
+                m_limiterEnabled.store(value > 0.5f);
+                break;
             case BusOrChain::kParamDownMixToLeft:
                 m_downmixStereoToMono = ( value > 0.5f ) ? true : false;
                 m_downmixToLeft       = ( value > 0.5f ) ? true : false;
@@ -218,6 +221,8 @@ namespace AudIO
                 return m_pan.value();
             case BusOrChain::kParamStereo:
                 return m_downmixStereoToMono ? 0.f : 1.f;
+            case BusOrChain::kParamLimiter:
+                return m_limiterEnabled.load() ? 1.f : 0.f;
             case BusOrChain::kParamDownMixToLeft:
                 return m_downmixStereoToMono ? ( m_downmixToLeft ? 1.f : 0.f ) : 0.f;
             case BusOrChain::kParamDownMixToRight:
@@ -240,6 +245,8 @@ namespace AudIO
     void Chain::prepareToPlay( uint32_t samplerate, uint32_t blocksize )
     {
         Object::prepareToPlay( samplerate, blocksize );
+        m_limiterGain = 1.0f;
+        m_limiterRelease = 1.0f - std::exp(-1.0f / (0.1f * std::max(1u, samplerate)));
         // Do it for all objects
         for( auto& obj : _objects )
             obj.second->prepareToPlay( samplerate, blocksize );
@@ -254,7 +261,7 @@ namespace AudIO
 
         if( utils::isEqual<float>( 0.f, bypassGain ) )
         {
-            return Buffer.copyInputsToOutputs();
+            Buffer.copyInputsToOutputs();
         }
         else
         {
@@ -289,6 +296,23 @@ namespace AudIO
                 }
             } // !Muted
         } // !Bypass
+
+        // Stereo-linked, zero-latency sample-peak limiter, after inserts/gain.
+        // Instant attack, 100 ms release, fixed 0.98 ceiling; no makeup gain.
+        if(m_limiterEnabled.load())
+        {
+            for(uint32_t sample = 0; sample < Buffer.getBlockSize(); ++sample)
+            {
+                float peak = 0.0f;
+                for(uint32_t channel = 0; channel < Buffer.getNumOutputChannels(); ++channel)
+                    peak = std::max(peak, std::abs(Buffer.getOutputBuffer(channel)[sample]));
+                const float target = peak > 0.98f ? 0.98f / peak : 1.0f;
+                m_limiterGain = std::min(target, m_limiterGain + (1.0f - m_limiterGain) * m_limiterRelease);
+                for(uint32_t channel = 0; channel < Buffer.getNumOutputChannels(); ++channel)
+                    Buffer.getOutputBuffer(channel)[sample] *= m_limiterGain;
+            }
+        }
+        else m_limiterGain = 1.0f;
 
         if( outMeterEnabled.load() )
             metering.process( Buffer );

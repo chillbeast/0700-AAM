@@ -47,6 +47,8 @@ namespace mt
 
         mute.onValueChange.connect( [&]() { if( bus ) bus->setMute( mute.get() ); } );
         bypass.onValueChange.connect( [&]() { if( bus ) bus->setBypass( bypass.get() ); } );
+        solo.onValueChange.connect([&]() { if(bus) bus->setSolo(solo.get()); });
+        limiter.onValueChange.connect([&]() { if(bus) bus->setLimiter(limiter.get()); });
         gain.onValueChange.connect( [&]() { if( bus ) bus->setOutputGain( gain.get() ); } );
         pan.onValueChange.connect( [&]() { if( bus ) bus->setOutputPan( pan.get() ); } );
         routedTo.onValueChange.connect( [&]() {
@@ -80,6 +82,8 @@ namespace mt
         state = VT;
 
         mute.referTo( state, IDs::mute, UM, false );
+        solo.referTo(state, IDs::solo, UM, false);
+        limiter.referTo(state, "limiter", UM, false);
         gain.referTo( state, IDs::gain, UM, GAIN::DEFAULT );
         pan.referTo( state, IDs::pan, UM, PAN::DEFAULT );
         routedTo.referTo( state, IDs::route, UM, AudIO::DawBusManager::getDefaultStereoOutBusName() );
@@ -89,6 +93,7 @@ namespace mt
 
         // Do this at the last to restore processing.
         bypass.referTo( state, IDs::bypass, UM, false );
+        if(bus) { bus->setSolo(solo.get()); bus->setLimiter(limiter.get()); }
     }
 
     void MTIBus::valueTreePropertyChanged( juce::ValueTree& treeWhosePropertyHasChanged, const juce::Identifier& property )
@@ -254,7 +259,7 @@ namespace mt
 
     void MTBusManager::setBusSolo( const juce::String& BusName, bool Value )
     {
-        busMgr.setBusOutSolo( BusName.toStdString(), Value );
+        if(auto* bus = getBus(BusName)) bus->solo = Value;
     }
 
     void MTBusManager::setBusGain( const juce::String& BusName, float Value )

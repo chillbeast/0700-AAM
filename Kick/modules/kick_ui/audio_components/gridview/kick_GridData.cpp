@@ -285,7 +285,7 @@ namespace kick_ui
             case 16: index = 5; break;
             case 24: index = 6; break;
             case 32: index = 7; break;
-            case 78: index = 8; break;
+            case 48: index = 8; break;
             case 64: index = 9; break;
             case 96: index = 10; break;
             default: index = 5; break;

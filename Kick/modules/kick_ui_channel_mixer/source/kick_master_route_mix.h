@@ -57,6 +57,9 @@ namespace kick_ui
             panSlider.onValueChanged   = [&]( double Value ) { if( pBus) pBus->pan = Value; };
             levelSlider.onValueChanged = [&]( double Value ) { if( pBus) pBus->gain = CommonUtils::midiToGain(Value); };
             mute.onClick               = [&]() { if( pBus) pBus->mute = mute.getToggleState() ; };
+            limiter.setComponentID("master-limiter");
+            limiter.setClickingTogglesState(true);
+            limiter.onClick = [&]() { if(pBus) pBus->limiter = limiter.getToggleState(); };
             ioListBox.onValueChanged   = [&]( const juce::String& value ) { updateData(); };
 
             masterInserts.onClick = [&]() {
@@ -94,7 +97,7 @@ namespace kick_ui
                     panSlider.knobRotated( value );
                     break;
                 case contracts::DeviceControlContracts::KnobSequence::EN_KNOB_16:
-                    value > 0 ? mute.setToggleState( true, juce::dontSendNotification ) : mute.setToggleState( false, juce::dontSendNotification );
+                    if(pBus && value != 0) pBus->mute = value > 0;
                     break;
             }
         }
@@ -149,15 +152,18 @@ namespace kick_ui
                 scope = std::make_shared<mt::Kick::ScopeTracker>();
 
                 auto muteValueHandler  = [&]() { mute.setToggleState( pBus ? pBus->mute.get() : false, juce::dontSendNotification ); };
+                auto limiterValueHandler = [&]() { limiter.setToggleState(pBus && pBus->limiter.get(), juce::dontSendNotification); };
                 auto panValueHandler   = [&]() { panSlider.setValue( pBus ? (double)pBus->pan.get() : 0.0, juce::dontSendNotification ); };
                 auto levelValueHandler = [&]() { levelSlider.setValue( CommonUtils::gainToMidi( pBus ? (double)pBus->gain.get() : 0.0 ), juce::dontSendNotification ); };
 
                 pBus->mute.onValueChange.connect( muteValueHandler, scope );
+                pBus->limiter.onValueChange.connect(limiterValueHandler, scope);
                 pBus->pan.onValueChange.connect( panValueHandler, scope );
                 pBus->gain.onValueChange.connect( levelValueHandler, scope );
 
                 // Force data update.
                 pBus->mute.onValueChange();
+                pBus->limiter.onValueChange();
                 pBus->pan.onValueChange();
                 pBus->gain.onValueChange();
             }
@@ -170,6 +176,7 @@ namespace kick_ui
             levelSlider.setValue( 0.0, juce::dontSendNotification );
             panSlider.setValue( 0.0, juce::dontSendNotification );
             mute.setToggleState( false, juce::dontSendNotification );
+            limiter.setToggleState(false, juce::dontSendNotification);
             ioListBox.setSelected( 0, juce::dontSendNotification );
         }
 

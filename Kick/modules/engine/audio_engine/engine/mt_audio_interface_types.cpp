@@ -126,6 +126,8 @@ namespace mt
 
         semi.onValueChange.connect( centsCalculator );
         fine.onValueChange.connect( centsCalculator );
+        gain.onValueChange.connect(gainCalculator);
+        pan.onValueChange.connect(gainCalculator);
 
         solo.referTo( vTree, IDs::solo, UM, false );
         mute.referTo( vTree, IDs::mute, UM, false );
@@ -216,12 +218,12 @@ namespace mt
     MTIPitchEnvelope::MTIPitchEnvelope( const juce::ValueTree& VT, juce::UndoManager* UM )
     {
         assert( VT.hasType( IDs::PITCHENV ) );
-        pitchtype.referTo( VT, IDs::TYPE, UM, ADSRType::Type_AD );
+        pitchtype.referTo( VT, IDs::TYPE, UM, ADSRType::Type_ADSR );
         pitchAttack.referTo( VT, IDs::attack, UM, 0 );
         pitchDecay.referTo( VT, IDs::decay, UM, 0 );
         pitchDepth.referTo( VT, IDs::depth, UM, 0 );
         pitchHold.referTo( VT, IDs::hold, UM, 0 );
-        pitchSustain.referTo( VT, IDs::sustain, UM, 0 );
+        pitchSustain.referTo( VT, IDs::sustain, UM, 127 );
     }
 
     ///
@@ -231,12 +233,12 @@ namespace mt
     {
         assert( VT.hasType( IDs::FILTERENV ) );
 
-        filtertype.referTo( VT, IDs::TYPE, UM, ADSRType::Type_AD );
+        filtertype.referTo( VT, IDs::TYPE, UM, ADSRType::Type_ADSR );
         filterAttack.referTo( VT, IDs::attack, UM, 0 );
         filterDecay.referTo( VT, IDs::decay, UM, 0 );
         filterDepth.referTo( VT, IDs::depth, UM, 0 );
         filterHold.referTo( VT, IDs::hold, UM, 0 );
-        filterSustain.referTo( VT, IDs::sustain, UM, 0 );
+        filterSustain.referTo( VT, IDs::sustain, UM, 127 );
     }
 
     ///
@@ -246,12 +248,12 @@ namespace mt
     {
         assert( VT.hasType( IDs::AMPENV ) );
 
-        amptype.referTo( VT, IDs::TYPE, UM, ADSRType::Type_AD );
+        amptype.referTo( VT, IDs::TYPE, UM, ADSRType::Type_ADSR );
         ampAttack.referTo( VT, IDs::attack, UM, 0 );
         ampDecay.referTo( VT, IDs::decay, UM, 0 );
-        ampDepth.referTo( VT, IDs::depth, UM, 0 );
+        ampDepth.referTo( VT, IDs::depth, UM, 127 );
         ampHold.referTo( VT, IDs::hold, UM, 0 );
-        ampSustain.referTo( VT, IDs::sustain, UM, 0 );
+        ampSustain.referTo( VT, IDs::sustain, UM, 127 );
     }
 
     ///
@@ -299,6 +301,7 @@ namespace mt
     MTIKeys::MTIKeys( juce::ValueTree& VT, juce::UndoManager* UM )
         : MTICommonDrumKeys( VT, UM )
     {
+        keyTracking.referTo(VT, "keyTracking", UM, true);
         samplePlay.referTo( VT, IDs::samplePlay, UM, SamplePlayType::ONE_SHOT );
         layerPlay.referTo( VT, IDs::layerPlay, UM, LayerPlayType::VELOCITY );
     }
@@ -456,6 +459,9 @@ namespace mt
     {
         jassert( V.hasType( IDs::PROGRAM ) );
         juce::ValueTree state = V;
+        input.referTo(state, "audioInput", UM, "None");
+        armed.referTo(state, "audioArmed", UM, false);
+        monitor.referTo(state, "audioMonitor", UM, false);
     }
 
     // MTISequenceData::
@@ -498,6 +504,8 @@ namespace mt
         name.referTo( state, IDs::name, UM, "" );
         id.referTo( state, IDs::id, UM, "" );
         programId.referTo( state, IDs::program, UM, "" );
+        armed.referTo(state, "recordArmed", UM, true);
+        monitor.referTo(state, "inputMonitor", UM, true);
         isSeqLength.referTo( state, IDs::usingSequenceLength, UM, false ); // By default use track length.
         mute.referTo( state, IDs::mute, UM, false );
         solo.referTo( state, IDs::solo, UM, false );

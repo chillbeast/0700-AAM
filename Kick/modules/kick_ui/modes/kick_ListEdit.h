@@ -28,6 +28,8 @@ namespace kick_ui
     public:
         ListEditTimingCorrect();
         ~ListEditTimingCorrect() = default;
+        mt::TimingCorrect getOptions();
+        static void show();
 
     private:
         ui::KickToggleOptions globalTC{ "GLOBAL TIMING CORRECT", { "Off", "On" } };
@@ -36,6 +38,8 @@ namespace kick_ui
         ui::KickImageButton   triplet{ "TRIPLET" };
         ui::KickListBox       type{ "TYPE", { "Start", "End", "Length", "Legato" } };
         ui::KickListBox       events{ "EVENTS", { "All", "Selected", "Range" } };
+        ui::KickNumber        fromBar{"FROM BAR", 1, 999, 1}, toBar{"THROUGH BAR", 1, 999, 1};
+        mt::MTSelected target{mt::getAudioInterface().getSelected()};
         ui::KickSlider        swing{ "SWING", juce::Slider::LinearBar, juce::Slider::TextBoxBelow };
         ui::KickSlider        shiftTiming{ "SHIFT  TIMING", juce::Slider::LinearBar, juce::Slider::TextBoxBelow };
         ui::KickSlider        window{ "WINDOW", juce::Slider::LinearBar, juce::Slider::TextBoxBelow };

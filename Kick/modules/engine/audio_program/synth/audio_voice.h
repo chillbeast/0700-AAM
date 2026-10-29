@@ -32,6 +32,25 @@ namespace mt
 
         explicit AVoice( MTIAtomicProgramMaster& Master, ASoundSlice* Slice = nullptr )
             : ISynthVoice( Master, Slice ) {}
+
+        void setKeygroupParameters(double Ratio, float Left, float Right)
+        {
+            keyRatio = Ratio; keyLeft = Left; keyRight = Right;
+        }
+
+        void process(juce::AudioBuffer<float>& buffer) override
+        {
+            if(!ISynthVoice::isRunning()) return;
+            ASliceRenderer::getNextBlock(tempBuffer, master.pitchRatio.load() * keyRatio);
+            gain.applyGain(tempBuffer, buffer.getNumSamples());
+            buffer.addFrom(0, 0, tempBuffer, 0, 0, buffer.getNumSamples(), keyLeft);
+            buffer.addFrom(1, 0, tempBuffer, 1, 0, buffer.getNumSamples(), keyRight);
+            if(hasFinished()) makeFree();
+        }
+
+    private:
+        double keyRatio{1.0};
+        float keyLeft{1.0f}, keyRight{1.0f};
     };
 
 } // namespace mt

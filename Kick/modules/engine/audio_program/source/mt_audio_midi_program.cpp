@@ -29,25 +29,29 @@ namespace mt
         : MTIProgram( VT, UM )
         , MTIMidiProgramData( VT, UM ) {};
 
+    std::optional<juce::MidiMessage> MTMidiProgram::controllerMessage(const juce::Identifier& property) const
+    {
+        const auto text = property.toString();
+        if(!text.startsWith("CC")) return {};
+        const auto number = text.substring(2);
+        if(number.isEmpty() || !number.containsOnly("0123456789")) return {};
+        const int cc = number.getIntValue();
+        if(!juce::isPositiveAndBelow(cc, 128) || text != "CC" + juce::String(cc)) return {};
+        return juce::MidiMessage::controllerEvent(getMidiChannel(), cc, juce::jlimit(0, 127, (int)vTree.getProperty(property, 0)));
+    }
+
     void MTMidiProgram::valueTreePropertyChanged( juce::ValueTree& treeWhosePropertyHasChanged, const juce::Identifier& Property )
     {
         auto port = getPort();
 
         if( vTree == treeWhosePropertyHasChanged )
         {
-            if( Property.toString().containsIgnoreCase( "CC" ) )
+            if(auto msg = controllerMessage(Property))
             { // CC messages...
-                auto trk         = ae.getTrackData( aeSel.sequence, aeSel.track );
-                auto controllerS = Property.toString().trim().trimCharactersAtStart( "CC" );
-
-                const auto controllerType = controllerS.getIntValue();
-                const auto value          = (int)vTree.getProperty( Property, 0 );
-                auto       msg            = juce::MidiMessage::controllerEvent( trk ? (int)trk->midiOutChannel.get() : 1, controllerType, value );
-
-                ae.sendMidiMessage( port, msg );
+                ae.sendMidiMessage(port, *msg);
 
                 reloadMidiMeter( 1.f );
-                outMidiMeter.reload( ( MIDI::SCALER * value ) );
+                outMidiMeter.reload(MIDI::SCALER * msg->getControllerValue());
             }
             else if( Property.toString().containsIgnoreCase( "BankLSB" ) || Property.toString().containsIgnoreCase( "BankMSB" ) )
             {

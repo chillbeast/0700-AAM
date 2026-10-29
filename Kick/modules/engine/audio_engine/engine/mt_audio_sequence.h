@@ -69,6 +69,7 @@ namespace mt
 
         int setName( const juce::String& Name );
         int setBPM( int BPM );
+        int setTimeSignature(int Numerator, int Denominator);
         int setLength( int Bars );
         int setLength( float Multiplier );
 
@@ -98,6 +99,11 @@ namespace mt
         void        setRecordState( RecordState State ) { MTISequenceData::rState = State; };
         inline bool isArmed() { return RecordState::Armed == getRecordState(); };
         inline bool isRecording() { return RecordState::Recording == getRecordState(); };
+        void setCountInBars(int bars) { pendingCountInBars = juce::jlimit(0, 2, bars); }
+        bool isCountingIn() const { return countInRemaining.load() > 0; }
+        unsigned int getCountInRemainingTicks() const { return countInRemaining.load(); }
+        uint64_t getElapsedTicks() const { return elapsedTicks.load(); }
+        bool hasStartedTimeline() const { return timelineStarted.load(); }
 
         // Playhead...
         inline MTPlayhead& playhead() { return sequencePlayhead; }
@@ -169,7 +175,7 @@ namespace mt
         void                          initializeTickDataFromTempoSettings( const MTTempoSettings& tempoSettings );
         inline const MTTempoSettings& getSequenceTempoSettings( unsigned int bar )
         {
-            return ( isUsingMasterBPM() ? manager.getTempoSettingsAtBar( bar ) : getTempoSettingsAtBar( bar ) );
+            return getTempoSettingsAtBar( bar ); // master tempo does not replace the sequence's meter
         };
         //void clearCounters();
         void isCircularRouted( const juce::String&, const MTTrack*, bool& );
@@ -212,6 +218,11 @@ namespace mt
         std::atomic<unsigned int> pos1_8{ 0 };
         std::atomic<unsigned int> pos1_16{ 0 };
         std::atomic<unsigned int> prevTicks{ 0 };
+        int pendingCountInBars{0};
+        unsigned int countInOffset{0}, lastCountInBeat{0};
+        std::atomic<unsigned int> countInRemaining{0};
+        std::atomic<uint64_t> elapsedTicks{0};
+        std::atomic<bool> timelineStarted{false};
 
         double lengthFactor{ 1 };
         int    lengthInTicks{ 1 };

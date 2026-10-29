@@ -70,7 +70,13 @@ namespace AudIO
     void LFO::setFrequency( float Freq, bool Force ) noexcept
     {
         params_.Freq = utils::clamp<float>( Freq, 0.001f, 20000.f );
-        recalculate();
+        params_.SHDuration = 1.f / params_.Freq;
+        if(Force || !configured) recalculate();
+        else if(this->sampleRate() > 0)
+        {
+            phaseIncrement = (double)params_.Freq / this->sampleRate();
+            shSteps = utils::max<unsigned int>(1, static_cast<unsigned int>(this->sampleRate() * params_.SHDuration));
+        }
     }
 
     void LFO::setPhase( float Phase ) noexcept
@@ -84,10 +90,11 @@ namespace AudIO
 
     void LFO::recalculate() noexcept
     {
+        configured = true;
         phase       = params_.Phase;
         curPhase    = phase;
         curValue    = 0.f;
-        shSteps     = static_cast<unsigned int>( this->sampleRate() / params_.SHDuration );
+        shSteps     = utils::max<unsigned int>(1, static_cast<unsigned int>(this->sampleRate() * params_.SHDuration));
         shIncrement = shSteps;
 
         if( ( params_.Freq > 0.0001f ) && ( this->sampleRate() > 0 ) )
@@ -215,11 +222,16 @@ namespace AudIO
             break;
             case LFOType::SAMPLE_HOLD:
             {
+                const auto steps = utils::max<unsigned int>(1, shSteps);
                 shIncrement += NumSamples;
-                if( shIncrement >= shSteps )
-                    shIncrement = 0;
-                // Reset step count and fall through
+                if( shIncrement >= steps )
+                {
+                    shIncrement %= steps;
+                    heldValue = utils::random(-1.f, 1.f);
+                }
+                curValue = heldValue;
             }
+            break;
             default: //case LFOType::NOISE:
             {
                 curValue = utils::random( -1.f, 1.f );

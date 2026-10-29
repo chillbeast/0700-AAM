@@ -467,6 +467,7 @@ namespace mt
 
     struct MTIKeys : public MTICommonDrumKeys
     {
+        CachedValue<bool> keyTracking;
         CachedValue<SamplePlayType> samplePlay;
         CachedValue<LayerPlayType>  layerPlay;
 
@@ -595,6 +596,8 @@ namespace mt
     struct MTIAudioProgramData
     {
         explicit MTIAudioProgramData( const juce::ValueTree& V, juce::UndoManager* UM = nullptr );
+        CachedValue<juce::String> input;
+        CachedValue<bool> armed, monitor;
     };
 
     struct MTISequenceData : public MTILoopData
@@ -617,6 +620,7 @@ namespace mt
     struct MTITrackData
     {
         explicit MTITrackData( const juce::ValueTree& V, juce::UndoManager* UM = nullptr );
+        CachedValue<bool> armed, monitor;
 
         bool                                  record{ false };
         int                                   index{ 0 };
@@ -819,6 +823,8 @@ namespace mt
         juce::String                 name;
         CachedValue<bool>            mute;
         CachedValue<bool>            bypass;
+        CachedValue<bool>            solo;
+        CachedValue<bool>            limiter;
         CachedValue<juce::String>    routedTo;
         CachedValue<GainConstrainer> gain;
         CachedValue<PanConstrainer>  pan;

@@ -21,7 +21,7 @@
 
 // module include files...
 
-#include "audio_voice.h"
+#include "drum_voice.h"
 
 namespace mt
 {
@@ -35,9 +35,10 @@ namespace mt
         // Pre-reseve Memory...
         for( auto i = 0; i < getPolyphony(); ++i )
         {
-            voices.emplace_back( std::make_unique<AVoice>( master ) );
+            voices.emplace_back( std::make_unique<DrumVoice>( master ) );
         }
         ISynthObject::addVoices( voices );
+        releaseTriggers.reserve(128);
     }
 
     KeygroupProgram::~KeygroupProgram()
@@ -55,106 +56,96 @@ namespace mt
         setBypass( ( pKeys == nullptr ) );
     }
 
-    void KeygroupProgram::noteOn( int Note, int Velocity )
+    void KeygroupProgram::noteOffAll()
     {
-        if( !pKeys || !CommonUtils::isValidMidiNote( Note ) )
-            return;
-
-        if( pKeys->isNoteEffectivelyMuted( Note ) ) return;
-
-        //if( !pKeys->isSourceAssigned( Note ) ) return;
-
-        return;
-        /*
-        //DBG( "AA" << Note << " " << Velocity );
-        auto vt = pKeys->getSampleVT( Note );
-        if( vt.isValid() )
-        {
-            // No polyphony on the same note number...
-            auto voice = isNotePlaying( Note );
-            if( nullptr == voice )
-                voice = findFreeVoice( Note );
-
-            if( nullptr != voice )
-            {
-                auto noteData = pKeys->getSampleForNote( Note );
-
-                std::vector<AFile::Ptr> sounds;
-                std::vector<int>        validLayers;
-                for( auto i = 0; i < MAX_LAYERS; ++i )
-                {
-                    auto vPtr = AudioFileManager::Instance().GetOrLoad( noteData.layer[i].source );
-                    sounds.push_back( vPtr );
-                    if( vPtr )
-                    {
-                        validLayers.push_back( i );
-                    }
-                } // for
-
-                switch( noteData.layerPlay )
-                {
-                    break;
-                    case LayerPlayType::RANDOM:
-                        noteData.idx = AudIO::utils::random<int>( 0, ( (int)validLayers.size() - 1 ) );
-                        break;
-                    case LayerPlayType::CYCLE:
-                    {
-                        auto loc = std::find( begin( validLayers ), end( validLayers ), noteData.idx );
-                        if( ++loc != validLayers.end() ) noteData.idx = *loc;
-                        else noteData.idx = validLayers[0];
-                    }
-                    break;
-                    case LayerPlayType::VELOCITY:
-                    {
-                        noteData.idx = -1;
-                        for( auto i = 0; i < validLayers.size(); ++i )
-                        {
-                            auto l = validLayers[i];
-                            if( noteData.layer[l].velocityStart <= Velocity && Velocity < noteData.layer[l].velocityEnd )
-                            {
-                                noteData.idx = l;
-                                break;
-                            }
-                        }
-                    }
-                }; // switch
-
-                if( ( -1 < noteData.idx && noteData.idx < MAX_LAYERS ) && ( sounds[noteData.idx] ) )
-                {
-                    SynthVoice::Params* VoiceParameters = &voice->p;
-
-                    auto vel  = CommonUtils::midiToGain( Velocity );
-                    auto gain = ( noteData.gain * noteData.layer[noteData.idx].gain );
-                    gain      = LayerPlayType::VELOCITY == noteData.layerPlay ? ( gain ) : ( gain * vel );
-
-                    VoiceParameters->voice           = sounds[noteData.idx];
-                    VoiceParameters->midiNote        = Note;
-                    VoiceParameters->rootNote        = noteData.keyNote;
-                    VoiceParameters->startSample     = noteData.layer[noteData.idx].offset;
-                    VoiceParameters->lengthInSamples = sounds[noteData.idx]->getNumSamplesPerChannel();
-                    VoiceParameters->gain            = gain;
-                    VoiceParameters->pan             = noteData.pan + noteData.layer[noteData.idx].pan;
-                    VoiceParameters->sampleRate      = (float)sampleRate();
-                    VoiceParameters->lfo             = noteData.lfo;
-                    VoiceParameters->envelope        = noteData.env;
-
-                    VoiceParameters->pitchFactor = AudIO::utils::calculatePitchFactor( noteData.semi, noteData.fine );
-
-                    // Queue this voice for processing...
-                    addVoiceForPlayback( voice, Note );
-                    //if( added ) DBG( "NoteAdded" );
-                }
-
-                // Simultaneous plays...
-                for( auto i = 0; i < MAX_SIMUL_ACTIONS; ++i )
-                {
-                    if( -1 != noteData.sPlay[i] )
-                        noteOn( noteData.sPlay[i], Velocity );
-                    if( -1 != noteData.sMute[i] )
-                        noteMute( noteData.sMute[i], true );
-                }
-            }
-        }*/
+        releaseTriggers.clear(); ISynthObject::noteOffAll();
     }
 
+    void KeygroupProgram::processNoteMessage(const juce::MidiMessage& message)
+    {
+        if(!pKeys || !message.isNoteOnOrOff()) return;
+        const int note = message.getNoteNumber(), velocity = message.getVelocity();
+        if(message.isNoteOn())
+        {
+            releaseTriggers.erase(std::remove_if(releaseTriggers.begin(), releaseTriggers.end(), [note](const auto& pending) { return pending.note == note; }), releaseTriggers.end());
+            if(pKeys->isProgramEffectivelyMuted()) return;
+            pKeys->forEachZone(note, [&](int key, MTIKeys& zone) {
+                if(zone.mute.get() || pKeys->isNoteEffectivelyMuted(key)) return;
+                if(zone.samplePlay.get() == SamplePlayType::NOTE_OFF)
+                {
+                    forEachVoice([&](ISynthVoice& v) {
+                        auto& voice = static_cast<DrumVoice&>(v);
+                        if(voice.isPlayingNote(note) && voice.getZone() == zone.vTree) voice.noteOff();
+                    });
+                    releaseTriggers.push_back({note, key, velocity, zone.vTree});
+                }
+                else startZone(key, zone, note, velocity);
+            });
+        }
+        else
+        {
+            forEachVoice([&](ISynthVoice& v) {
+                auto& voice = static_cast<DrumVoice&>(v);
+                if(voice.isPlayingNote(note) && voice.getPlayMode() == SamplePlayType::NOTE_ON) voice.noteOff();
+            });
+            // Move matching releases out before triggering, so a duplicate note
+            // off cannot retrigger and project edits cannot retarget a release.
+            for(auto it = releaseTriggers.begin(); it != releaseTriggers.end();)
+                if(it->note == note)
+                {
+                    const auto pending = *it; it = releaseTriggers.erase(it);
+                    if(auto* zone = pKeys->getKeysClip(pending.key))
+                        if(zone->vTree == pending.zone) startZone(pending.key, *zone, note, velocity > 0 ? velocity : pending.velocity);
+                }
+                else ++it;
+        }
+    }
+
+    void KeygroupProgram::noteOn(int note, int velocity)
+    {
+        if(pKeys && CommonUtils::isValidMidiNote(note))
+            pKeys->forEachZone(note, [&](int key, MTIKeys& zone) { startZone(key, zone, note, velocity); });
+    }
+
+    void KeygroupProgram::startZone(int key, MTIKeys& zone, int note, int velocity)
+    {
+        if(pKeys->isProgramEffectivelyMuted() || zone.mute.get() || pKeys->isNoteEffectivelyMuted(key)) return;
+        std::array<int, MAX_LAYERS> valid{}; int count = 0;
+        for(int layer = 0; layer < MAX_LAYERS; ++layer)
+            if(auto* slice = zone.getSourceSlice(layer))
+                if(slice->source && slice->source->isValid()) valid[count++] = layer;
+        if(count == 0) return;
+        int layer = -1;
+        switch(zone.layerPlay.get())
+        {
+            case LayerPlayType::CYCLE: layer = valid[nextLayer[(size_t)key]++ % (unsigned)count]; break;
+            case LayerPlayType::RANDOM: layer = valid[AudIO::utils::random<int>(0, count - 1)]; break;
+            case LayerPlayType::VELOCITY:
+                for(int i = 0; i < count; ++i)
+                    if(velocity >= zone.layers[valid[i]]->velStart.get() && velocity <= zone.layers[valid[i]]->velEnd.get()) { layer = valid[i]; break; }
+                break;
+        }
+        if(layer < 0) return;
+        if(zone.muteGroup.get() > 0)
+            forEachVoice([&](ISynthVoice& v) {
+                auto& voice = static_cast<DrumVoice&>(v);
+                if(!voice.isFree() && (int)voice.getZone().getProperty(IDs::muteGroup, 0) == zone.muteGroup.get()) voice.noteOff();
+            });
+        // The per-zone limit counts voices from this zone, not other overlapping
+        // zones playing the same MIDI pitch.
+        ISynthVoice* oldest = nullptr; int playing = 0;
+        forEachVoice([&](ISynthVoice& v) {
+            auto& voice = static_cast<DrumVoice&>(v);
+            if(!voice.isFree() && voice.getZone() == zone.vTree && voice.getNote() == note)
+            { ++playing; if(!oldest || voice.getStartOrder() < oldest->getStartOrder()) oldest = &voice; }
+        });
+        auto* selected = playing >= zone.polyPhony.get() && oldest ? oldest->changeToSettingupAndReturn() : getFreeVoice(note, POLYPHONY::MAX);
+        if(auto* voice = dynamic_cast<DrumVoice*>(selected))
+        {
+            voice->setSlice(zone.getSourceSlice(layer)); voice->attachToAndReset(zone.vTree);
+            const int cents = zone.cents.load() + (zone.keyTracking.get() ? 100 * (note - zone.keyNote.get()) : 0);
+            voice->setKeygroupParameters(std::exp2(cents / 1200.0), zone.gL.load(), zone.gR.load());
+            voice->noteOn(note, velocity); addVoiceForPlayback(voice);
+        }
+    }
 };

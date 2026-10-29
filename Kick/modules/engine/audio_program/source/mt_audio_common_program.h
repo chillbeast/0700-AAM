@@ -45,6 +45,19 @@ namespace mt
         void setEnvelopeDecay( int Note, EnvelopeType EnvType, int Value );
         void setEnvelopeSustain( int Note, EnvelopeType EnvType, int Value );
         void setEnvelopeDepth( int Note, EnvelopeType EnvType, int Value );
+        juce::ValueTree getEnvelopeState(int Note, EnvelopeType Type);
+        void setEnvelopeEnabled(int Note, EnvelopeType Type, bool Enabled);
+        bool getEnvelopeEnabled(int Note, EnvelopeType Type);
+        void setEnvelopeRelease(int Note, EnvelopeType Type, int Value);
+        int getEnvelopeRelease(int Note, EnvelopeType Type);
+        void setFilterType(int Note, int Type);
+        int getFilterType(int Note);
+        void setFilterCutoff(int Note, double Hertz);
+        double getFilterCutoff(int Note);
+        void setFilterResonance(int Note, double Amount);
+        double getFilterResonance(int Note);
+        void setLFOEnabled(int Note, bool Enabled);
+        bool getLFOEnabled(int Note);
         //getters
         ADSRType getEnvType( int Note, EnvelopeType EnvType );
         int      getEnvelopeAttack( int Note, EnvelopeType EnvType );

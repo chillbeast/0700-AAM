@@ -55,88 +55,41 @@ namespace mt
         setBypass( ( pDrum == nullptr ) );
     }
 
-    void DrumProgram::noteOn( int Note, int Velocity )
+    void DrumProgram::noteOn(int note, int velocity)
     {
-        // Return if no audio synth available or invalid midi length
-        if( !pDrum || !CommonUtils::isValidMidiNote( Note ) ) return;
-
-        if( auto pNote = pDrum->getDrumClip( Note ) )
+        if(!pDrum || !CommonUtils::isValidMidiNote(note) || triggering[(size_t)note]) return;
+        juce::ScopedValueSetter<bool> guard(triggering[(size_t)note], true);
+        if(auto* pad = pDrum->getDrumClip(note))
         {
-            // Stop clips in same mute group.
+            for(auto other : pDrum->getNotesInSameMuteGroup(note)) if(CommonUtils::isValidMidiNote(other)) noteOff(other);
+            for(auto other : pad->sMute.getActions()) if(CommonUtils::isValidMidiNote(other)) noteOff(other);
+            std::array<int, MAX_LAYERS> valid{}; int count = 0;
+            for(int layer = 0; layer < MAX_LAYERS; ++layer)
+                if(auto* slice = pad->getSourceSlice(layer))
+                    if(slice->source && slice->source->isValid()) valid[count++] = layer;
+            int layer = -1;
+            if(count && !pDrum->isNoteEffectivelyMuted(note))
             {
-                auto notes = pDrum->getNotesInSameMuteGroup( Note );
-                for( auto it : notes )
-                    if( CommonUtils::isValidMidiNote( it ) )
-                        noteOff( it );
-            }
-
-            // Stop playback of clips simultaneously.
-            {
-                auto notes = pNote->sMute.getActions();
-                for( auto it : notes )
-                    noteOff( it );
-            }
-
-            if( !pDrum->isNoteEffectivelyMuted( Note ) && pNote->getSource( 0 ).length() || pDrum->isNoteSolo( Note ) && pNote->getSource( 0 ).length() )
-            {
-                auto notePoly = pNote->polyPhony.get();
-
-                // Get layers that have valid source.
-                std::vector<int> validSourceIndex;
-                auto             sources = pNote->getSources();
-                for( auto i = 0; i < sources.size(); ++i )
+                switch(pad->layerPlay.get())
                 {
-                    if( sources[i].isNotEmpty() )
-                        validSourceIndex.push_back( i );
-                }
-
-                // Choose a layer to play sound
-                auto layerToPlay = 0;
-                switch( pNote->layerPlay.get() )
-                {
-                    break;
-                    case LayerPlayType::RANDOM:
-                        layerToPlay = AudIO::utils::random<int>( 0, ( (int)validSourceIndex.size() - 1 ) );
-                        break;
-                    case LayerPlayType::CYCLE:
-                        if( noteLayerIdx.find( Note ) == noteLayerIdx.end() )
-                            noteLayerIdx[Note] = 0;
-                        else
-                            noteLayerIdx[Note] = juce::jlimit( 0, (int)( validSourceIndex.size() - 1 ), ++noteLayerIdx[Note] );
-
-                        layerToPlay = noteLayerIdx[Note];
-                        break;
+                    case LayerPlayType::CYCLE: layer = valid[(noteLayerIdx[note]++ % count)]; break;
+                    case LayerPlayType::RANDOM: layer = valid[AudIO::utils::random<int>(0, count - 1)]; break;
                     case LayerPlayType::VELOCITY:
-                    {
-                        for( const auto& it : validSourceIndex )
-                        {
-                            if( pNote->layers[it]->velStart.get() <= Velocity && Velocity < pNote->layers[it]->velEnd.get() )
-                            {
-                                layerToPlay = it;
-                                break;
-                            }
-                        }
-                    }
-                }; // switch
-
-                if( auto soundSlice = pNote->layers[layerToPlay]->src )
-                {
-                    // Start playback.
-                    if( auto voice = dynamic_cast<DrumVoice*>( getFreeVoice( Note, notePoly ) ) )
-                    {
-                        voice->setSlice( soundSlice );
-                        voice->noteOn( Note, Velocity );
-                        addVoiceForPlayback( voice );
-                    }
+                        for(int i = 0; i < count; ++i)
+                            if(velocity >= pad->layers[valid[i]]->velStart.get() && velocity <= pad->layers[valid[i]]->velEnd.get()) { layer = valid[i]; break; }
+                        break;
                 }
             }
-
-            // Trigger playback of clips simultaneously.
-            {
-                auto notes = pNote->sPlay.getActions();
-                for( auto it : notes )
-                    noteOn( it, Velocity );
-            }
+            if(layer >= 0)
+                if(auto* voice = dynamic_cast<DrumVoice*>(getFreeVoice(note, pad->polyPhony.get())))
+                {
+                    voice->setSlice(pad->getSourceSlice(layer));
+                    voice->attachToAndReset(pad->vTree);
+                    voice->setKeygroupParameters(std::exp2(pad->cents.load() / 1200.0), pad->gL.load(), pad->gR.load());
+                    voice->noteOn(note, velocity); addVoiceForPlayback(voice);
+                }
+            for(auto other : pad->sPlay.getActions()) if(CommonUtils::isValidMidiNote(other)) noteOn(other, velocity);
         }
     }
+
 };

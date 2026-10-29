@@ -155,16 +155,12 @@ namespace mt
                 playingSequence->stop();
             }
             playingSequence = s;
+            setTransportState(TransportState::Playing);
             //playingSequence->updatePlayhead(); // redundant call as playingSequence->play() updates the playhead.
 
-            if( isPaused() )
-            {
-                playingSequence->resume();
-            }
-            else
-            {
-                playingSequence->play();
-            }
+            curTick = 0;
+            prevTick = 0;
+            playingSequence->play();
 
             setTransportState( TransportState::Playing );
             retVal = 0;
@@ -175,6 +171,13 @@ namespace mt
 
     int MTAudioTransportManager::resume( int Seq )
     {
+        const juce::ScopedLock guard(getSequenceLock());
+        if(playingSequence == getSequence(Seq) && playingSequence)
+        {
+            if(isPaused() && !playingSequence->isLooping.get() && playingSequence->playhead().normized >= 1.0) return play(Seq);
+            if(isPaused()) { playingSequence->resume(); setTransportState(TransportState::Playing); return 0; }
+            if(isPlaying()) return 0;
+        }
         return play( Seq );
     }
 
@@ -218,8 +221,12 @@ namespace mt
     int MTAudioTransportManager::play( int Seq, bool FromBeginning, bool Now )
     {
         const juce::ScopedLock guard(getSequenceLock());
-        if( Now )
-            return FromBeginning ? play( Seq ) : resume( Seq );
+        if(Now)
+        {
+            if(FromBeginning && isPaused()) setTransportState(TransportState::Stopped);
+            if(FromBeginning) { curTick = 0; prevTick = 0; }
+            return FromBeginning ? play(Seq) : resume(Seq);
+        }
         else
         {
             if( auto s = getSequence( Seq ) )
@@ -290,7 +297,8 @@ namespace mt
         {
             auto length        = playingSequence->isLooping.get() ? playingSequence->loopEnd.get() - playingSequence->loopStart.get() : (int)playingSequence->length.get();
             auto lengthInTicks = length * playingSequence->getTicksPerBar();
-            if( lengthInTicks > 0 && curTick % lengthInTicks == 0 )
+            if( lengthInTicks > 0 && !playingSequence->isCountingIn()
+                && curTick.load() / lengthInTicks > prevTick.load() / lengthInTicks )
             {
                 play( nextSequenceToPlay );
                 nextSequenceToPlay = -1;

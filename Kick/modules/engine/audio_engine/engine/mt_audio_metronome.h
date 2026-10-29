@@ -37,59 +37,39 @@ namespace mt
             }
             assert( _metronome != nullptr );
 
-            /// Setup callbacks...
-            signals::onBar.connect( [&]( int ) { triggerBar(); } );
-            signals::onBeat.connect( [&]( int ) { if( MTMetronomeRate::MET_SEQ == _met.rate() ) triggerBeat(); } );
-
-            signals::on1_2.connect( [&]() { if( MTMetronomeRate::MET_1_2 == _met.rate() ) triggerBeat(); } );
-            signals::on1_4.connect( [&]() { if( MTMetronomeRate::MET_1_4 == _met.rate() ) triggerBeat(); } );
-            signals::on1_8.connect( [&]() { if( MTMetronomeRate::MET_1_8 == _met.rate() ) triggerBeat(); } );
-            signals::on1_16.connect( [&]() { if( MTMetronomeRate::MET_1_16 == _met.rate() ) triggerBeat(); } );
-
-            _met.source.onValueChanged = [&]() {
+            countInConnection = signals::onCountIn.connect([this](bool accent) { trigger(accent, true); });
+            clickConnection = signals::onMetronome.connect([this](bool accent) { trigger(accent, false); });
+            _met.source.onValueChanged = [this]() {
                 auto src = _met.source();
-                if( _metronome )
-                    _metronome->setSource( src );
+                if(_metronome) _metronome->setSource(src);
             };
-
-            _met.enabled.onValueChanged = [&]() {
-                if( _metronome )
-                    _metronome->setBypass( !_met.enabled() );
-            };
-
-            // Force value updates...
             _met.source.onValueChanged();
-            _met.enabled.onValueChanged();
         }
 
         ~MTMetronome()
         {
+            countInConnection.disconnect();
+            clickConnection.disconnect();
+            _met.source.onValueChanged = nullptr;
             _metronome->noteOffAll();
-            _engine.removeObject( _metronome->getId() );
+            _engine.removeObject(_metronome->getId());
             _metronome = nullptr;
         }
 
-        void triggerBar()
+        std::function<bool()> shouldPlay;
+        void trigger(bool accent, bool force)
         {
-            //DBG( "Bar: " << juce::String( juce::Time::getMillisecondCounterHiRes() ) );
-            if( _metronome && _met.enabled() )
-                _metronome->noteOn( 0, 127 );
+            if(_metronome && (force || (_met.enabled() && (!shouldPlay || shouldPlay()))))
+                _metronome->noteOn(accent ? 0 : 1, accent ? 127 : 80);
         }
 
-        void triggerBeat()
-        {
-            //DBG( "Beat: " << juce::String( juce::Time::getMillisecondCounterHiRes() ) );
-            if( _metronome && _met.enabled() )
-                _metronome->noteOn( 1, 64 );
-        }
-
-    private:
     private:
         juce::ValueTree   _vt{ IDs::METRONOME };
         AudIO::DawEngine& _engine;
         KickMetronome&    _met{ getSettings().metronome };
 
         Metronome* _metronome{ nullptr };
+        sigslot::scoped_connection countInConnection, clickConnection;
     };
 
 } // namespace MT

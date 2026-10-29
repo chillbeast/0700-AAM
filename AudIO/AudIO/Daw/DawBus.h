@@ -46,6 +46,7 @@ namespace AudIO
 
         // Control Parameters
         bool isMuted() const;
+        bool isEffectivelyMuted() const { return _isMuted || _isSoloMuted; }
         bool isBypassed() const;
 
         void setMute( bool NewState );
@@ -61,6 +62,7 @@ namespace AudIO
 
         float getOutputPan() const;
         void  setOutputPan( float Pan );
+        void setLimiter(bool Enabled);
 
         BusStatus   getStatus() const;
         DawInserts* getInsertsInterface() { return dynamic_cast<AudIO::DawInserts*>( this ); }
@@ -71,7 +73,7 @@ namespace AudIO
         MeterData& readInMeter();
 
         // To facilitate solo...
-        void setSolo( bool NewState ) const;
+        void setSolo( bool NewState );
         bool isSolo() const { return _isSolo; };
 
     private:

@@ -421,10 +421,11 @@ namespace kick_ui
 
         sampleNeedRepaint.connect( [&]() {
             triggerAsyncUpdate();
-        } );
+        }, signalScope);
     }
     AudioGridComponent::~AudioGridComponent()
     {
+        signalScope.reset(); cancelPendingUpdate();
         for( auto tool : tools )
         {
             delete tool.second;
@@ -629,11 +630,7 @@ namespace kick_ui
 
     void AudioGridParameterComponent::clearDataForSelectedParam()
     {
-        if( auto vt = pAudio->getParamTree( paramName ); vt.isValid() )
-        {
-            vt.removeAllProperties( nullptr );
-            repaint();
-        }
+        if(pAudio) { pAudio->clearAutomation(paramName); repaint(); }
     }
 
     void AudioGridParameterComponent::setSelectedTool( AudioGridToolType ToolType )
@@ -671,7 +668,7 @@ namespace kick_ui
             xPos = x;
         }
 
-        if( paramName != "None" )
+        if(pAudio && ae.isProjectLoaded() && paramName != "None")
         {
             g.fillAll( ui::Theme::backgroundColour( 9 ) );
             g.setColour( juce::Colours::blue );
@@ -705,6 +702,7 @@ namespace kick_ui
                         else if( paramName == "PAN" )
                         {
                             int middleY = b.getY() + b.getHeight() / 2;
+                            PropertyValue = b.getY() + b.getHeight() * PropertyValue / 100;
                             g.setColour( juce::Colours::white );
                             g.drawLine( b.getX(), middleY, b.getRight(), middleY, .5f );
                             g.setColour( ui::Theme::backgroundColour( 12 ) );
@@ -757,6 +755,11 @@ namespace kick_ui
 
     void AudioGridParameterComponent::handleMouseEvent( const juce::MouseEvent& Event )
     {
+        if(!pAudio || getHeight() < 1 || paramName == "None") return;
+        if(toolType == AudioGridToolType::GridEraseTool)
+        {
+            pAudio->eraseAutomationPoint(paramName, gridData.getTimeFromX(Event.x)); repaint(); return;
+        }
         float currentX = Event.x;
         float currentY = Event.y;
         if( toolType == AudioGridToolType::GridPencilTool && currentY <= getHeight() && currentY >= 0 )
@@ -767,6 +770,7 @@ namespace kick_ui
                 {
                     auto start = gridData.getTimeFromX( currentX );
                     auto value = static_cast<int>( 100.f * ( 1.f - ( static_cast<float>( currentY ) / getHeight() ) ) );
+                    if(paramName == "Mute") value = value >= 50 ? 100 : 0;
                     pAudio->setValueForParam( paramName, start, value );
                 }
             }
@@ -811,18 +815,18 @@ namespace kick_ui
 
         sampleNeedRepaint.connect( [&]() {
             refresh();
-        } );
+        }, signalScope);
 
         gridData.audioGridChanged.connect( [&] {
             gridComponent.setSize( gridData.getWidth(), audiogridViewport.getHeight() );
             scaleComp.setSize( gridData.getWidth(), scaleViewport.getHeight() );
             playhead.setSize( gridData.getWidth(), audiogridViewport.getHeight() + scaleViewport.getHeight() );
             paramComp.setSize( gridData.getWidth(), paramViewport.getHeight() );
-        } );
+        }, signalScope);
 
         stateNeedChage.connect( [&]( bool State ) {
             mt::utils::setEnabled( State, reverse, warp, mute, fadeIn, fadeOut, fine, semi, bpm, level, nudge, editEnd, editStart, duplicate, split );
-        } );
+        }, signalScope);
 
         audiogridViewport.setScrollOnDragMode( juce::Viewport::ScrollOnDragMode::all );
         scaleViewport.setScrollOnDragMode( juce::Viewport::ScrollOnDragMode::all );
@@ -830,7 +834,7 @@ namespace kick_ui
         scaleComp.onMouseClick = [&]( double Value ) {
             //Seek the playhead position to play
             auto tickPos = gridData.getTimeFromX( Value );
-            //Use this tickPos to Move the playhead pos
+            editCursor = tickPos; ae.seek(tickPos);
             updateAudioPlayhead();
         };
 
@@ -867,11 +871,33 @@ namespace kick_ui
             gridSettings.setScreen( ui::GridSettings::GridAudio );
             mt::utils::showDialog( "SETTINGS", &gridSettings, [this]( int R ) {}, { 0, 0, 650, 520 } );
         };
+        headerTools.copy.setComponentID("audio-copy"); headerTools.paste.setComponentID("audio-paste");
+        headerTools.paste.setVisible(true);
+        headerTools.copy.onClick = [this] {
+            if(!pAudio) return;
+            audioClipboard = pAudio->copySelectedAudio(); clipboardProject = ae.getProjectDir();
+            if(audioClipboard.getNumChildren() == 0) mt::utils::showNotification("Select audio regions to copy");
+        };
+        headerTools.paste.onClick = [this] {
+            auto* tempo = ae.getTempoMgr(ae.getSelectedSequence());
+            const int at = editCursor >= 0 ? editCursor : gridData.getTimeFromX((int)(gridData.playHead.normized * gridComponent.getWidth()), false);
+            if(!pAudio || !tempo || clipboardProject != ae.getProjectDir() || !pAudio->pasteAudio(audioClipboard, at, tempo->getTicksUpto(ae.getSequenceLength())))
+                mt::utils::showNotification("Copy regions first and choose a paste position with enough space");
+            else gridComponent.refresh();
+        };
 
         components = {
             &sampleList, &fadeIn, &fadeOut, &level, &semi, &fine, &bpm, &warp, &reverse,
             &mute, &duplicate
         };
+        level.setRange(-60, 12, 1);
+        scaleComp.setComponentID("audio-scale"); semi.setComponentID("audio-semi"); fine.setComponentID("audio-fine");
+        fadeIn.setComponentID("audio-fade-in"); fadeOut.setComponentID("audio-fade-out");
+        split.setComponentID("audio-split"); clearAuto.setComponentID("audio-clear-auto"); automation.setComponentID("audio-automation");
+        semi.onValueChanged = [this](int value) { if(pAudio) pAudio->setSelectedAudioProperty(mt::IDs::semi, value); };
+        fine.onValueChanged = [this](int value) { if(pAudio) pAudio->setSelectedAudioProperty(mt::IDs::fine, value); };
+        fadeIn.onValueChanged = [this](int value) { if(pAudio) pAudio->setSelectedAudioProperty("fadeIn", value); };
+        fadeOut.onValueChanged = [this](int value) { if(pAudio) pAudio->setSelectedAudioProperty("fadeOut", value); };
 
         headerTools.toolSelectionChanged.connect( [&]( AudioGridToolType Type ) {
             gridComponent.toolTypeChanged( Type );
@@ -888,7 +914,7 @@ namespace kick_ui
             bool isWarp = warp.getToggleState();
             pAudio->setSelectedAudioSampleWarp( isWarp );
 
-            mt::utils::setEnabled( isWarp, semi, fine, bpm );
+            mt::utils::setEnabled(true, semi, fine); mt::utils::setEnabled(isWarp, bpm);
         };
 
         bpm.onValueChanged = [&]( int value ) {
@@ -907,10 +933,7 @@ namespace kick_ui
                 auto& selSample       = pAudio->getSelectedAudioSampleList();
                 auto  playHeadPos     = gridData.playHead.normized * gridComponent.getWidth();
                 auto  playHeadPosTick = gridData.getTimeFromX( playHeadPos, false );
-                for( auto& sample : selSample )
-                {
-                    //Check the Sample and validate the loopstart and update the selected sample and split the sample at playhead position
-                }
+                if(pAudio->splitSelectedAudio(editCursor >= 0 ? editCursor : playHeadPosTick, ae.getSequenceBPM(ae.getSelectedSequence()) * mt::defaultPPQN / 60.0)) gridComponent.refresh();
             }
         };
 
@@ -1151,6 +1174,7 @@ namespace kick_ui
 
     void AudioProgramGrid::refresh()
     {
+        pAudio = ae.isProjectLoaded() ? dynamic_cast<mt::MTAudioProgram*>(ae.getProgram(ae.getSelectedProgram())) : nullptr;
         auto length = ae.getTrackLength( aeSel.sequence, aeSel.track );
         headerTools.bars.setValue( length, juce::dontSendNotification );
         if( pAudio )
@@ -1160,9 +1184,13 @@ namespace kick_ui
             {
                 mt::MTIAudio audioSample( samples, &ae.getUndoManager() );
                 level.setValue( audioSample.level.get(), juce::dontSendNotification );
-                mute.setToggleState( audioSample.src->isMuted.get(), juce::dontSendNotification );
-                reverse.setToggleState( audioSample.src->isReversed.get(), juce::dontSendNotification );
-                warp.setToggleState( audioSample.src->isWarp.get(), juce::dontSendNotification );
+                mute.setToggleState( audioSample.mute.get(), juce::dontSendNotification );
+                reverse.setToggleState( audioSample.reverse.get(), juce::dontSendNotification );
+                warp.setToggleState( audioSample.warp.get(), juce::dontSendNotification );
+                semi.setValue((int)samples.getProperty(mt::IDs::semi, 0), juce::dontSendNotification);
+                fine.setValue((int)samples.getProperty(mt::IDs::fine, 0), juce::dontSendNotification);
+                fadeIn.setValue((int)samples.getProperty("fadeIn", 0), juce::dontSendNotification);
+                fadeOut.setValue((int)samples.getProperty("fadeOut", 0), juce::dontSendNotification);
                 bpm.setValue( audioSample.bpm.get(), juce::dontSendNotification );
             }
         }

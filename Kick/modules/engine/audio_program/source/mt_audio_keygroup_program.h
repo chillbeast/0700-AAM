@@ -32,6 +32,15 @@ namespace mt
         ~MTKeygroupProgram();
 
         MTIKeys* getKeysClip( int Note );
+        MTIKeys* getZoneForNote(int Note);
+        int getZoneKeyForNote(int Note);
+        template<typename Visitor> void forEachZone(int Note, Visitor&& Visit)
+        {
+            for(auto& entry : iSampleMap)
+                if(auto* zone = dynamic_cast<MTIKeys*>(entry.second.get()))
+                    if(Note >= zone->minNote.get() && Note <= zone->maxNote.get()) Visit(entry.first, *zone);
+        }
+        void noteProcess(juce::Array<juce::MidiMessage>& Messages) override;
 
         LayerPlayType  getNoteLayerPlay( int Note );
         SamplePlayType getNoteSamplePlay( int Note ) override;
@@ -47,7 +56,7 @@ namespace mt
         void noteOn( int Note, int Velocity ) override { key->noteOn( Note, Velocity ); };
         void noteOff( int Note ) override { key->noteOff( Note ); };
         void noteOff( std::vector<int>& Notes ) override { key->noteOff( Notes ); };
-        void noteOffAll() override { key->noteOffAll(); };
+        void noteOffAll() override { MTIProgram::noteOffAll(); key->noteOffAll(); };
         void noteMute( int Note, bool Mute ) override { key->noteMute( Note, Mute ); };
         void noteReset( int Note ) override { key->noteReset( Note ); };
         void noteReset( std::vector<int>& Notes ) override { key->noteReset( Notes ); };

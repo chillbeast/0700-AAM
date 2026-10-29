@@ -45,6 +45,7 @@ namespace mt
     {
         state.store( State::SETUP );
         noteNo = Note;
+        if(auto* slice = ASliceRenderer::getSlice()) slice->setReSampleRate(sampleRate);
 
         gain.setCurrentAndTargetValue( 0.0 );
         gain.setTargetValue( ( (double)Velocity / 127.0 ) ); // Linear scale...

@@ -74,7 +74,7 @@ namespace kick_ui
         {
             // Calculate step time range...
             stepRange.startTime = startTime;
-            stepRange.endTime   = endTime;
+            stepRange.endTime   = juce::jmin(range.endTime, endTime);
 
             // Apply velocity Probability Ratchet changes...
             if( control.paramValueListBox.getSelected() == "Velocity" )
@@ -104,7 +104,7 @@ namespace kick_ui
     void StepComponent::updateValuestoEngine( std::vector<int>& Values )
     {
         auto stepRange    = range;
-        stepRange.endTime = stepRange.startTime + data.ticksPerQl;
+        stepRange.endTime = juce::jmin(range.endTime, stepRange.startTime + data.ticksPerQl);
         for( auto i = 0; i < data.numSteps; ++i )
         {
             // Apply velocity Probability Ratchet changes...
@@ -125,7 +125,7 @@ namespace kick_ui
             }
             // Next step...
             stepRange.startTime += data.ticksPerQl;
-            stepRange.endTime += data.ticksPerQl;
+            stepRange.endTime = juce::jmin(range.endTime, stepRange.startTime + data.ticksPerQl);
         }
 
         triggerAsyncUpdate();
@@ -136,7 +136,7 @@ namespace kick_ui
         auto stepRange    = range;
         auto bar          = gridData.getBarFromX( range.startTime );
         auto qlWidth      = gridData.getTicksPerQuantization( bar );
-        stepRange.endTime = stepRange.startTime + data.ticksPerQl;
+        stepRange.endTime = juce::jmin(range.endTime, stepRange.startTime + data.ticksPerQl);
         for( auto i = 0; i < data.numSteps; ++i )
         {
             // Apply velocity changes...
@@ -145,16 +145,16 @@ namespace kick_ui
             else
             {
                 if( control.paramValueListBox.getSelected() == "Velocity" )
-                    ae.addOrModifyNote( stepRange.noteStart, stepRange.startTime, qlWidth, Values[i] );
+                    ae.addOrModifyNote( stepRange.noteStart, stepRange.startTime, juce::jmax(1, juce::jmin(qlWidth, range.endTime - stepRange.startTime)), Values[i] );
                 else if( control.paramValueListBox.getSelected() == "Probability" )
-                    ae.addOrModifyNote( stepRange.noteStart, stepRange.startTime, qlWidth, MIDI::MAX, Values[i] );
+                    ae.addOrModifyNote( stepRange.noteStart, stepRange.startTime, juce::jmax(1, juce::jmin(qlWidth, range.endTime - stepRange.startTime)), MIDI::MAX, Values[i] );
                 else if( control.paramValueListBox.getSelected() == "Ratchet" )
-                    ae.addOrModifyNote( stepRange.noteStart, stepRange.startTime, qlWidth, MIDI::MAX, 100, Values[i] );
+                    ae.addOrModifyNote( stepRange.noteStart, stepRange.startTime, juce::jmax(1, juce::jmin(qlWidth, range.endTime - stepRange.startTime)), MIDI::MAX, 100, Values[i] );
             }
 
             // Next step...
             stepRange.startTime += data.ticksPerQl;
-            stepRange.endTime += data.ticksPerQl;
+            stepRange.endTime = juce::jmin(range.endTime, stepRange.startTime + data.ticksPerQl);
         }
 
         triggerAsyncUpdate();
@@ -192,7 +192,7 @@ namespace kick_ui
     void StepComponent::handleAsyncUpdate()
     {
         auto stepRange    = range;
-        stepRange.endTime = ( range.startTime + data.ticksPerQl );
+        stepRange.endTime = juce::jmin(range.endTime, range.startTime + data.ticksPerQl);
         std::vector<int> colourID( 16, contracts::DeviceControlContracts::PadColourTrans );
         std::vector<int> velocity( 16, 0 );
         auto             page          = control.getPage();
@@ -226,7 +226,7 @@ namespace kick_ui
                 {
                     //Maintaining minimum
                     data.indexValues[i] = ( avg / numNotes ) < 1 ? 1 : ( avg / numNotes );
-                    if( !isPadSelected && ( i >= idxStart && i < idxStart + 16 ) )
+                    if( !isPadSelected && ( i >= idxStart && i < idxStart + data.numStepsPerPage ) )
                     {
                         colourID[colourIndex++]   = contracts::DeviceControlContracts::PadColourRed;
                         velocity[velocityIndex++] = data.indexValues[(size_t)i];
@@ -235,7 +235,7 @@ namespace kick_ui
                 else if( control.paramValueListBox.getSelected() == "Probability" )
                 {
                     data.indexProbValues[i] = ( probAvg / numNotes ) < 1 ? 1 : ( probAvg / numNotes ); //updating velocity
-                    if( !isPadSelected && ( i >= idxStart && i < idxStart + 16 ) )
+                    if( !isPadSelected && ( i >= idxStart && i < idxStart + data.numStepsPerPage ) )
                     {
                         colourID[colourIndex++]   = contracts::DeviceControlContracts::PadColourLightSkyBlue;
                         velocity[velocityIndex++] = ( data.indexProbValues[(size_t)i] * 127 ) / 100;
@@ -244,14 +244,14 @@ namespace kick_ui
                 else if( control.paramValueListBox.getSelected() == "Ratchet" )
                 {
                     data.indexRatchetValues[i] = ( ratAvg / numNotes ); //updating velocity
-                    if( !isPadSelected && ( i >= idxStart && i < idxStart + 16 ) ) //it should
+                    if( !isPadSelected && ( i >= idxStart && i < idxStart + data.numStepsPerPage ) ) //it should
                     {
                         colourID[colourIndex++]   = contracts::DeviceControlContracts::PadColourLightSkyBlue;
                         velocity[velocityIndex++] = ( data.indexRatchetValues[(size_t)i] * 127 ) / 8;
                     }
                 }
             }
-            else if( !isPadSelected && ( i >= idxStart && i < idxStart + 16 ) )
+            else if( !isPadSelected && ( i >= idxStart && i < idxStart + data.numStepsPerPage ) )
             {
                 colourID[colourIndex++]   = contracts::DeviceControlContracts::PadColourTrans;
                 velocity[velocityIndex++] = 0;
@@ -259,7 +259,7 @@ namespace kick_ui
 
             // Next Step.
             stepRange.startTime += data.ticksPerQl;
-            stepRange.endTime += data.ticksPerQl;
+            stepRange.endTime = juce::jmin(range.endTime, stepRange.startTime + data.ticksPerQl);
         }
 
         if( !isPadSelected && ( kick_ui::KickHome::Instance().getCurrentScreen() == kick_ui::Screen::HomeSequencerView ) )
@@ -423,8 +423,9 @@ namespace kick_ui
         if( juce::isPositiveAndBelow( Index, data.numSteps ) ) // Safety Check.
         {
             auto st  = range.startTime + ( Index * data.ticksPerQl );
-            auto et  = st + data.ticksPerQl;
+            auto et  = juce::jmin(range.endTime, st + data.ticksPerQl);
             auto bar = gridData.getBarFromX( st );
+            const int noteLength = juce::jmax(1, juce::jmin(gridData.getTicksPerQuantization(bar), range.endTime - st));
 
             data.selected[(size_t)Index] = !data.selected[(size_t)Index];
             if( data.selected[(size_t)Index] )
@@ -433,24 +434,24 @@ namespace kick_ui
                 {
                     data.indexProbValues[(size_t)Index]    = 100;
                     data.indexRatchetValues[(size_t)Index] = 1;
-                    ae.addOrModifyNote( range.noteStart, st, gridData.getTicksPerQuantization( bar ), Value, data.indexProbValues[(size_t)Index], data.indexRatchetValues[(size_t)Index] );
+                    ae.addOrModifyNote( range.noteStart, st, noteLength, Value, data.indexProbValues[(size_t)Index], data.indexRatchetValues[(size_t)Index] );
                 }
                 else if( control.paramValueListBox.getSelected() == "Probability" )
                 {
                     data.indexValues[(size_t)Index]        = MIDI::MAX;
                     data.indexRatchetValues[(size_t)Index] = 1;
-                    ae.addOrModifyNote( range.noteStart, st, gridData.getTicksPerQuantization( bar ), data.indexValues[(size_t)Index], Value, data.indexRatchetValues[(size_t)Index] );
+                    ae.addOrModifyNote( range.noteStart, st, noteLength, data.indexValues[(size_t)Index], Value, data.indexRatchetValues[(size_t)Index] );
                 }
                 else if( control.paramValueListBox.getSelected() == "Ratchet" )
                 {
                     data.indexValues[(size_t)Index]     = MIDI::MAX;
                     data.indexProbValues[(size_t)Index] = 100;
-                    ae.addOrModifyNote( range.noteStart, st, gridData.getTicksPerQuantization( bar ), data.indexValues[(size_t)Index], data.indexProbValues[(size_t)Index], Value );
+                    ae.addOrModifyNote( range.noteStart, st, noteLength, data.indexValues[(size_t)Index], data.indexProbValues[(size_t)Index], Value );
                 }
             }
             else
             {
-                ae.deleteNoteInTimeRange( aeSel, st, et );
+                ae.deleteNotesInRange(aeSel, mt::NotesInRange(range.noteStart, range.noteEnd, st, et));
             }
             triggerAsyncUpdate();
         }
@@ -461,7 +462,7 @@ namespace kick_ui
         if( juce::isPositiveAndBelow( Index, data.numSteps ) ) // Velocity
         {
             auto st  = range.startTime + ( Index * data.ticksPerQl );
-            auto et  = st + data.ticksPerQl;
+            auto et  = juce::jmin(range.endTime, st + data.ticksPerQl);
             auto bar = gridData.getBarFromX( st );
 
             contracts::DeviceControlContracts::PadColourIds padColour = contracts::DeviceControlContracts::PadColourTrans;
@@ -490,7 +491,7 @@ namespace kick_ui
         {
             auto r = range;
             r.startTime += ( Index * data.ticksPerQl );
-            r.endTime = ( r.startTime + data.ticksPerQl );
+            r.endTime = juce::jmin(range.endTime, r.startTime + data.ticksPerQl);
 
             if( control.paramValueListBox.getSelected() == "Velocity" )
                 ae.editNoteVelocity( aeSel, r, Value );
@@ -798,8 +799,7 @@ namespace kick_ui
                     }
                     else
                     {
-                        //TODO - Bank Updation not proper 4T,8T,16T... need to take it later
-                        auto maxPage = data.numSteps / data.numStepsPerPage;
+                        auto maxPage = (data.numSteps + data.numStepsPerPage - 1) / data.numStepsPerPage;
                         if( buttonCode < maxPage )
                         {
                             contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setBankMessage( buttonCode ) );
@@ -851,27 +851,14 @@ namespace kick_ui
             }
             else if( padState == contracts::DeviceControlContracts::BTN_PRESSED )
             {
-                if( contracts::DclContractsHelper::isHalfLevel() )
-                {
-                    if( topControl.paramValueListBox.getSelected() == "Velocity" )
-                    {
-                        auto currentIndex = ( stepComponent.getPage() * data.numStepsPerPage ) + padNum;
-                        stepComponent.toggleStep( currentIndex, padVelocity );
-                    }
-                }
-                else
-                {
-                    if( topControl.paramValueListBox.getSelected() == "Velocity" )
-                    {
-                        auto currentIndex = ( stepComponent.getPage() * data.numStepsPerPage ) + padNum;
-                        stepComponent.toggleStep( currentIndex );
-                    }
-                }
-
-                if( topControl.paramValueListBox.getSelected() == "Probability" )
-                    stepComponent.toggleStep( padNum, 100 );
-                else if( topControl.paramValueListBox.getSelected() == "Ratchet" )
-                    stepComponent.toggleStep( padNum, 1 );
+                const int pageIndex = stepComponent.getPage() * data.numStepsPerPage + padNum;
+                if(padNum >= data.numStepsPerPage || pageIndex >= data.numSteps) return;
+                if(topControl.paramValueListBox.getSelected() == "Velocity")
+                    stepComponent.toggleStep(pageIndex, ae.getPadVelocity(padNum, padVelocity));
+                else if(topControl.paramValueListBox.getSelected() == "Probability")
+                    stepComponent.toggleStep(pageIndex, 100);
+                else if(topControl.paramValueListBox.getSelected() == "Ratchet")
+                    stepComponent.toggleStep(pageIndex, 1);
             }
         }
         else if( contracts::DclContractsHelper::isKnobMessage( f_HwMsg ) )

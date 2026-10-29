@@ -18,66 +18,16 @@ namespace kick_ui
         }
     }
 
-    void AudioGridCutTool::mouseUp( const juce::MouseEvent& event )
+    void AudioGridCutTool::mouseUp(const juce::MouseEvent& event)
     {
-        if( event.mouseWasClicked() )
-        {
-            // Need to check the sample present at mouseposition
-            if( auto pAudioProgram = dynamic_cast<mt::MTAudioProgram*>( ae.getProgram( ae.getSelectedProgram() ) ) )
+        if(event.mouseWasClicked())
+            if(auto* program = dynamic_cast<mt::MTAudioProgram*>(ae.getProgram(ae.getSelectedProgram())))
             {
-                if( auto sample = pAudioProgram->getAudioSample( mDownTime ) )
-                {
-                    auto source    = sample->source.get();
-                    auto pSample   = mt::getAudioSoundCache().exists( source );
-                    auto startTime = sample->startTime.get();
-                    auto length    = sample->length.get();
-                    auto loopStart = sample->start.get();
-                    auto maxTicks  = gridData.getTicksPerQuantization( 0 ); //default bar
-                    auto loopEnd   = sample->end.get() == 0 ? pSample->getNumSamplesPerChannel() : sample->end.get();
-
-                    if( length > maxTicks )
-                    {
-                        auto   pSeqData       = ae.getSequenceData( ae.getSelectedSequence() );
-                        auto   tempo          = pSeqData ? pSeqData->tempo.get() : 120;
-                        double ticksPerSecond = gridData.getTicksPerBeat( 0 ) / ( BPM::TOSEC / tempo );
-                        double samplesPerTick = sample->src->getSourceSampleRate() / ticksPerSecond;
-
-                        auto lengthForNewSample = length + startTime - mDownTime;
-                        auto prevSampleLength   = length - lengthForNewSample;
-                        if( lengthForNewSample < maxTicks )
-                        {
-                            lengthForNewSample = maxTicks;
-                            prevSampleLength   = length - lengthForNewSample;
-                        }
-                        else if( prevSampleLength < maxTicks && length > maxTicks * 2 )
-                        {
-                            prevSampleLength   = maxTicks;
-                            lengthForNewSample = length - prevSampleLength;
-                        }
-                        auto startTimeForNewSample = startTime + prevSampleLength;
-                        auto prevSampleLoopEnd     = loopStart + prevSampleLength * samplesPerTick;
-
-                        // update prevsample data and add newsample
-                        pAudioProgram->addSample( source, startTimeForNewSample, lengthForNewSample, 0 );
-                        pAudioProgram->setLoopPointsForSample( startTimeForNewSample, prevSampleLoopEnd, loopEnd );
-                        pAudioProgram->setLoopPointsForSample( startTime, loopStart, prevSampleLoopEnd );
-                        pAudioProgram->setSampleLength( startTime, prevSampleLength );
-                        pAudioProgram->selectAllSamples( false );
-                        pAudioProgram->setSelectAudioSample( startTimeForNewSample, true );
-
-                        sampleNeedRepaint();
-                        return;
-                    }
-                    pAudioProgram->selectAllSamples( false );
-                    pAudioProgram->setSelectAudioSample( startTime, true );
-                }
-                else
-                    pAudioProgram->selectAllSamples( false );
+                program->selectAllSamples(false); program->selectAudioSample(mDownTime);
+                program->splitSelectedAudio(gridData.getTimeFromX(event.position.x), ae.getSequenceBPM(ae.getSelectedSequence()) * mt::defaultPPQN / 60.0);
                 sampleNeedRepaint();
             }
-        }
-        x1 = x2 = 0;
-        gridComp.repaint();
+        x1 = x2 = 0; gridComp.repaint();
     }
 
     void AudioGridCutTool::mouseDrag( const juce::MouseEvent& Event )

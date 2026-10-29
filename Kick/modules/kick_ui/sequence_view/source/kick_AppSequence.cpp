@@ -107,10 +107,12 @@ void AppSequence::onTransControlChange( juce::String timeSig, juce::String TC )
     juce::String      timeSigNum, timeSigDen;
 
     timeSigComp.addTokens( timeSig, "/", "" );
+    if(timeSigComp.size() != 2) return;
     timeSigNum = timeSigComp[0];
     timeSigDen = timeSigComp[1];
 
-    ae.setTimeSignature( ae.getSelectedSequence(), timeSigNum.getIntValue(), timeSigDen.getIntValue() );
+    if(ae.setTimeSignature(ae.getSelectedSequence(), timeSigNum.getIntValue(), timeSigDen.getIntValue()) != 0)
+        mt::utils::showNotification("Stop playback before changing the time signature");
 }
 
 void AppSequence::handleCommand( CPktMgr::HWMsg_t& f_HwMsg )

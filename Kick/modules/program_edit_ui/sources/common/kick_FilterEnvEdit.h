@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "kick_SampleVoiceEditor.h"
 namespace kick_ui
 {
     class FilterEnvEdit : public ui::KickGrid
@@ -76,29 +77,12 @@ namespace kick_ui
         ui::KickImageButton ampAhdsrBtn{ "ahdsr", "effect3" };
     };
 
-    class KickFilterEnvelope : public ui::KickGrid
-        , public KeyGroupInterface
+    class KickFilterEnvelope : public SampleVoiceEditor, public KeyGroupInterface
     {
     public:
-        KickFilterEnvelope( std::vector<int>& Keys, mt::MTKeygroupProgram*& PKeyGroup );
-        ~KickFilterEnvelope() = default;
-
-        void refresh() override;
-        void refreshPads();
-
-    private:
-        std::vector<int>&       keys;
-        mt::MTKeygroupProgram*& pKeyGroup;
-
-        std::array<ui::KickListBox, 3> env;
-
-        std::array<ui::KickRotary, 3> a;
-        std::array<ui::KickRotary, 3> d;
-        std::array<ui::KickRotary, 3> h;
-        std::array<ui::KickRotary, 3> s;
-        std::array<ui::KickRotary, 3> dep;
-
-        void visibilityChanged() override;
-        void handleCommand( CPktMgr::HWMsg_t& ) override;
+        KickFilterEnvelope(std::vector<int>& Keys, mt::MTKeygroupProgram*& Program);
+        void refresh() override { SampleVoiceEditor::refresh(); }
+        void refreshPads() { refresh(); }
+        void handleCommand(CPktMgr::HWMsg_t& Message) override { SampleVoiceEditor::handleCommand(Message); }
     };
 }

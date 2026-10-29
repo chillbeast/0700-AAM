@@ -65,6 +65,9 @@ namespace AudIO
 
         std::atomic<bool> m_downmixStereoToMono{ false };
         std::atomic<bool> m_downmixToLeft{ true };
+        std::atomic<bool> m_limiterEnabled{ false };
+        float m_limiterGain{1.0f};
+        float m_limiterRelease{1.0f};
 
         std::list<insertMeta>                                 _inserts;
         std::unordered_map<uint32_t, std::unique_ptr<Object>> _objects;

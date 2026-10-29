@@ -53,6 +53,8 @@ namespace kick_ui
         std::array<ui::KickRotary, 4> fine;
         std::array<ui::KickRotary, 4> amp;
         std::array<ui::KickRotary, 4> pan;
+        std::array<ui::KickRotary, 4> velocityLow, velocityHigh;
+
 
         void visibilityChanged() override;
         void handleCommand( CPktMgr::HWMsg_t& ) override;

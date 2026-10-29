@@ -32,7 +32,7 @@ namespace mt
         , public IMidiMsgProcessor
     {
     public:
-        ISynthObject( AudIO::Design& D, int Polyphony, AudIO::BusType Type = AudIO::BusType::Object );
+        ISynthObject( AudIO::Design& D, int Polyphony, AudIO::BusType Type = AudIO::BusType::Object, int Inputs = 0 );
         ~ISynthObject();
 
         // Overall program control API's
@@ -68,6 +68,7 @@ namespace mt
         virtual void initialize( uint32_t samplerate, uint32_t blocksize ){};
         virtual void shutdown(){};
         virtual void preProcess( juce::AudioBuffer<float>& buffer );
+        virtual void processInput(AudIO::Buffer<float>&) {}
         virtual void doProcess( juce::AudioBuffer<float>& buffer );
         virtual void postProcess( juce::AudioBuffer<float>& buffer );
 
@@ -87,6 +88,9 @@ namespace mt
 
     protected:
         MTIAtomicProgramMaster master;
+        std::atomic<bool> soloMuted{false};
+        sigslot::scoped_connection soloConnection;
+        template<typename Visitor> void forEachVoice(Visitor&& Visit) { for(auto& voice : voices) Visit(*voice); }
 
     private:
         std::atomic<bool>                         bypass_{ true };
@@ -97,6 +101,7 @@ namespace mt
         AudIO::LevelMeter meter;
 
         int numPolyphony;
+        uint64_t nextVoiceOrder{0};
 
         AudIO::Design& AudioDesign;
         MTIProgram*    program{ nullptr };

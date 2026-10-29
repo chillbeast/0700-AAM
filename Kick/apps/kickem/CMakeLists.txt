@@ -39,6 +39,10 @@ juce_add_gui_app(${TargetName}
         COMPANY_NAME ${TargetCompany}
 )
 
+if(MSVC)
+    target_link_options(${TargetName} PRIVATE "$<$<CONFIG:Debug>:/INCREMENTAL:NO>")
+endif()
+
 if(WIN32)
     # JUCE 7's resource-generation rule omits Info.txt, leaving the old Windows
     # file version in incremental builds after a community version change.

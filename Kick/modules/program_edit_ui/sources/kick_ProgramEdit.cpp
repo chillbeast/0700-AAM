@@ -52,7 +52,7 @@ namespace kick_ui
     {
         mt::utils::addAndMakeVisible( this, bars, selectAll, selectSample, pencil, erase, paste, cut, copy, settings, magnify );
         mt::utils::setRadioGroupID( (int)RadioGroupId::AudioHeader, selectAll, selectSample, pencil, erase, magnify, cut );
-        paste.setVisible( false );
+        paste.setVisible( true );
         pencil.triggerClick();
 
         mt::utils::setTitleColour( ui::Theme::textColour( 1 ), bars );
@@ -69,8 +69,8 @@ namespace kick_ui
         pencil.setBoundsRelative( 0.4893f, .21f, 0.0936f, 0.5789f );
         erase.setBoundsRelative( 0.5914f, .21f, 0.0936f, 0.5789f );
         cut.setBoundsRelative( 0.6936f, .21f, 0.0936f, 0.5789f );
-        copy.setBoundsRelative( 0.7957f, .21f, 0.0936f, 0.5789f );
-        paste.setBoundsRelative( 0.7957f, .21f, 0.0936f, 0.5789f );
+        copy.setBoundsRelative( 0.7957f, .21f, 0.044f, 0.5789f );
+        paste.setBoundsRelative( 0.846f, .21f, 0.044f, 0.5789f );
         settings.setBoundsRelative( 0.8978f, .21f, 0.0936f, 0.5789f );
     }
 

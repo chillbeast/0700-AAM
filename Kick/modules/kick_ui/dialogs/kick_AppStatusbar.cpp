@@ -25,6 +25,7 @@ namespace kick_ui
     AppStatusbar::AppStatusbar()
     {
         setName( "Statusbar" );
+        startTimerHz(20);
 
         boxInfo.setValueJustification( juce::Justification::centred );
         boxInfo.setColours( ui::Theme::textColour( 2 ), ui::Theme::backgroundColour( 5 ) );
@@ -71,6 +72,16 @@ namespace kick_ui
         init = true;
     }
 
+
+    void AppStatusbar::timerCallback()
+    {
+        auto& audio = mt::getAudioInterface();
+        if(!audio.isProjectLoaded()) return;
+        const int count = audio.getCountInBeatsRemaining();
+        if(count == previousCountIn) return;
+        previousCountIn = count;
+        setBoxInfo(count > 0 ? "COUNT IN: " + juce::String(count) + " beats" : (audio.isSequenceRecording() ? "Recording" : ""));
+    }
 
     void AppStatusbar::setBoxInfo( juce::String BoxInfo )
     {

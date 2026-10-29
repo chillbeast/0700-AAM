@@ -20,6 +20,7 @@
  */
 
 #include "hardware/source/kick_Resorces.h"
+#include "kick_ui_common/kick_ui_common.h"
 
 namespace kick_ui
 {
@@ -52,6 +53,8 @@ namespace kick_ui
         };
 
         automation.onClick = [&] {
+            signals::sigScreenClose(Screen::MenuProgramEdit);
+            mt::utils::showNotification("Audio automation lanes are in Program Edit; global automation recording is not implemented");
         };
 
         settings.onClick = [&] {

@@ -84,6 +84,8 @@ namespace AudIO
         float advance_polyBlep( unsigned int NumSamples ) noexcept { return nextSample_polyBlep( NumSamples ); }
 
     private:
+        bool configured{false};
+        float heldValue{0.f};
         static std::atomic<bool>                    tableInitialized;
         static std::array<float, LOOKUP_TABLE_SIZE> sineTable;
         static std::array<float, LOOKUP_TABLE_SIZE> sawTable;

@@ -90,6 +90,8 @@ namespace mt
 {
     static const std::set<std::shared_ptr<MTNote>> emptyNotes;
     static const std::vector<juce::String>         emptyList;
+    sigslot::signal<bool> signals::onCountIn = {};
+    sigslot::signal<bool> signals::onMetronome = {};
 
     sigslot::signal<>                                     signals::midiInputsChanged = {};
     sigslot::signal<int /*index*/, juce::String /*Bank*/> signals::bankChanged       = {};
@@ -140,6 +142,8 @@ namespace mt
         onTick.disconnect_all();
         onLoopBegin.disconnect_all();
         onLoopEnd.disconnect_all();
+        onCountIn.disconnect_all();
+        onMetronome.disconnect_all();
         onNote.disconnect_all();
         on1_2.disconnect_all();
         on1_2T.disconnect_all();
@@ -166,10 +170,19 @@ namespace mt
 
     {
         MTInstrumentProgram::tempoSource = [this]() { return manager ? (double)manager->getBPM() : 0.0; };
+        getSettings().onProjectAutosaveChanged = [this](bool enabled, int interval) {
+            if(manager) { manager->setAutoSaveTime(interval); manager->setAutoSave(enabled); }
+        };
+        getSettings().applyProjectAutosave();
+        manager->liveMidiReceived = [this](const MTSelected& target, const juce::MidiMessage& message) {
+            if(seqRecording) recordLiveMidiMsg(target, message);
+        };
+        manager->externalMidiStop = [this] { setSequencePause(); };
     }
 
     MTAudioInterface::~MTAudioInterface()
     {
+        stopTimer();
         manager.reset();
     }
 
@@ -178,6 +191,11 @@ namespace mt
         if( !manager )
             return;
 
+        stopTimer();
+        releasePerformancePads();
+        setSequenceRecording(false);
+        manager->liveMidiReceived = nullptr;
+        manager->externalMidiStop = nullptr;
         MTInstrumentProgram::tempoSource = nullptr;
 
         // Nothing in the UI may be notified from here on. Detach again even if the app
@@ -189,6 +207,7 @@ namespace mt
         // `manager` before running ~MTAudioManager, which closes again).
         manager->closeProject();
         manager.reset();
+        getSettings().onProjectAutosaveChanged = [](bool, int) {};
     }
     ///
     /// Listners
@@ -211,10 +230,80 @@ namespace mt
     ///
     /// Project API's
     ///
-    bool MTAudioInterface::isProjectLoaded() { return manager->isProjectLoaded(); }
-    bool MTAudioInterface::loadProject( juce::File& ProjectFile ) { return manager->loadProject( ProjectFile ); }
-    bool MTAudioInterface::closeProject() { return manager->closeProject(); }
-    bool MTAudioInterface::saveProject() { return manager->saveProject(); }
+    bool MTAudioInterface::isProjectLoaded() { return manager && manager->isProjectLoaded(); }
+    bool MTAudioInterface::loadProject( juce::File& ProjectFile )
+    {
+        projectError.clear(); releasePerformancePads(); setSequenceRecording(false);
+        const bool loaded = manager && manager->loadProject(ProjectFile);
+        if(!loaded) projectError = "Unable to open the project; check its file and save permissions";
+        return loaded;
+    }
+    bool MTAudioInterface::closeProject() { releasePerformancePads(); setSequenceRecording(false); return manager && manager->closeProject(); }
+    bool MTAudioInterface::saveProject()
+    {
+        projectError.clear();
+        const bool saved = manager && manager->saveProject();
+        if(!saved) projectError = "Unable to save the project; the previous file was preserved";
+        return saved;
+    }
+
+    bool MTAudioInterface::createProject(const juce::File& folder)
+    {
+        projectError.clear();
+        if(!manager) { projectError = "Audio engine is unavailable"; return false; }
+        if(folder.getFileName().isEmpty() || folder.existsAsFile() || !folder.findChildFiles(juce::File::findFilesAndDirectories, false, "*.kickPrj").isEmpty())
+        { projectError = "Choose a new project folder; existing projects will not be replaced"; return false; }
+        auto& defaults = getSettings().projects;
+        const int sequences = juce::jlimit(1, 64, defaults.numSeq()), tracks = juce::jlimit(1, 64, defaults.numTrackPerSeq());
+        const int bars = juce::jlimit((int)BAR::MIN, (int)BAR::MAX, defaults.bars());
+        const int bpm = juce::jlimit((int)BPM::MIN, (int)BPM::MAX, defaults.tempo());
+        const int numerator = juce::jlimit(1, 16, defaults.numerator().getIntValue());
+        int denominator = defaults.denominator().getIntValue();
+        if(denominator != 4 && denominator != 8 && denominator != 16 && denominator != 32) denominator = 4;
+        const int root = juce::jlimit(0, 11, defaults.rootNote());
+        const int scale = juce::jlimit(0, (int)ScaleAndNotes::scaleNames.size() - 1, defaults.scale());
+        juce::ValueTree document{IDs::ROOT};
+        document.setProperty(IDs::manufacturer, __manufacturer, nullptr); document.setProperty(IDs::version, __projectFileVersion, nullptr);
+        document.setProperty(IDs::name, folder.getFileName(), nullptr);
+        document.setProperty("projectDefaultRoot", root, nullptr); document.setProperty("projectDefaultScale", scale, nullptr);
+        auto tempos = [&](juce::ValueTree parent) {
+            juce::ValueTree tempo{IDs::TEMPO}; tempo.setProperty(IDs::bpm, bpm, nullptr); tempo.setProperty(IDs::num, numerator, nullptr);
+            tempo.setProperty(IDs::den, denominator, nullptr); tempo.setProperty(IDs::quantize, 16, nullptr); tempo.setProperty(IDs::length, -1, nullptr);
+            auto list = parent.getOrCreateChildWithName(IDs::TEMPOS, nullptr); list.addChild(tempo, -1, nullptr);
+        };
+        tempos(document);
+        auto programs = document.getOrCreateChildWithName(IDs::PROGRAMS, nullptr);
+        juce::ValueTree program{IDs::PROGRAM}; const auto programId = CommonUtils::createID();
+        program.setProperty(IDs::id, programId, nullptr); program.setProperty(IDs::type, (int)MTProgramType::Drum, nullptr); program.setProperty(IDs::name, "Program 001", nullptr);
+        auto performance = program.getOrCreateChildWithName(IDs::PERFORMANCE, nullptr);
+        performance.setProperty(IDs::rootNote, Note::rootNames()[(size_t)root], nullptr); performance.setProperty(IDs::scale, ScaleAndNotes::scaleNames[(size_t)scale], nullptr);
+        programs.addChild(program, -1, nullptr);
+        auto sequenceList = document.getOrCreateChildWithName(IDs::SEQUENCES, nullptr);
+        for(int s = 0; s < sequences; ++s)
+        {
+            juce::ValueTree sequence{IDs::SEQUENCE}; sequence.setProperty(IDs::id, CommonUtils::createID(), nullptr);
+            sequence.setProperty(IDs::name, "Sequence " + juce::String(s + 1).paddedLeft('0', 3), nullptr);
+            sequence.setProperty(IDs::length, bars, nullptr); sequence.setProperty(IDs::loopStart, 0, nullptr); sequence.setProperty(IDs::loopEnd, bars, nullptr);
+            sequence.setProperty(IDs::loop, true, nullptr); sequence.setProperty(IDs::isMasterBPM, true, nullptr); tempos(sequence);
+            for(int t = 0; t < tracks; ++t)
+            {
+                juce::ValueTree track{IDs::TRACK}; track.setProperty(IDs::id, CommonUtils::createID(), nullptr);
+                track.setProperty(IDs::name, "Track " + juce::String(t + 1).paddedLeft('0', 3), nullptr);
+                track.setProperty(IDs::usingSequenceLength, true, nullptr); track.setProperty(IDs::length, bars, nullptr); track.setProperty(IDs::program, programId, nullptr);
+                sequence.addChild(track, -1, nullptr);
+            }
+            sequenceList.addChild(sequence, -1, nullptr);
+        }
+        if(folder.createDirectory().failed()) { projectError = "Cannot create the new project folder"; return false; }
+        const auto file = KickXML::resolveFile(folder, __projectFileExtension); juce::TemporaryFile temporary(file);
+        const auto xml = document.toXmlString();
+        if(file.exists() || xml.isEmpty() || !temporary.getFile().replaceWithText(xml) || file.exists() || !temporary.overwriteTargetFileWithTemporary())
+        { projectError = "Cannot save the new project"; return false; }
+        auto projectFile = file;
+        if(!loadProject(projectFile)) { projectError = "The new project was saved but could not be opened"; return false; }
+        if(!saveProject()) { projectError = "Project opened, but its updated state could not be saved"; return false; }
+        return true;
+    }
 
     ///
     /// Selection API's
@@ -881,9 +970,87 @@ namespace mt
         return -1;
     }
 
-    int MTAudioInterface::setTimeSignature( int /*Sequence*/, int /*Numerator*/, int /*Denominator*/ )
+    int MTAudioInterface::setTimeSignature( int Sequence, int Numerator, int Denominator )
     {
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(auto* sequence = manager->getSequence(Sequence)) return sequence->setTimeSignature(Numerator, Denominator);
         return -1;
+    }
+
+    TimingCorrect MTAudioInterface::getTimingCorrect()
+    {
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(auto* sequence = manager->getSequence())
+        {
+            auto options = TimingCorrect::read(sequence->getState());
+            options.division = sequence->getTempoSettings().getQuantizationLevel();
+            options.barTicks = sequence->getTicksPerBar();
+            return options;
+        }
+        return {};
+    }
+
+    void MTAudioInterface::setTimingCorrect(const TimingCorrect& options)
+    {
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(auto* sequence = manager->getSequence())
+        {
+            options.save(sequence->getState(), &getUndoManager());
+            sequence->setQuantization(options.division);
+        }
+    }
+
+    int MTAudioInterface::applyTimingCorrect(const MTSelected& selection, const TimingCorrect& options)
+    {
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        auto* track = manager->getTrack(selection);
+        if(!track) return -1;
+        getUndoManager().beginNewTransaction("Timing Correct");
+        const auto notes = options.selectedOnly ? track->getSelectedNoteList() : juce::Array<juce::ValueTree>();
+        std::vector<juce::ValueTree> targets;
+        for(auto note : track->getNoteListVT())
+            if((!options.selectedOnly || notes.contains(note)) && (int)note[IDs::start] >= options.rangeStart && (int)note[IDs::start] < options.rangeEnd) targets.push_back(note);
+        auto correction = options; correction.enabled = true; // Apply is explicit; the toggle controls live recording
+        const int end = (int)track->getLengthInTicks();
+        int changed = 0;
+        for(auto note : targets)
+        {
+            const int start = note[IDs::start], length = note[IDs::length];
+            int newStart = start, newLength = length;
+            switch(options.type)
+            {
+                case TimingCorrect::Start: newStart = juce::jlimit(0, juce::jmax(0, end - 1), correction.correct(start)); break;
+                case TimingCorrect::End: newLength = juce::jmax(1, correction.correct(start + length) - start); break;
+                case TimingCorrect::Length: newLength = juce::jmax(1, correction.correct(length, false)); break;
+                case TimingCorrect::Legato:
+                {
+                    int next = end;
+                    for(auto other : track->getNoteListVT())
+                    if((int)other[IDs::no] == (int)note[IDs::no] && (int)other[IDs::start] > start) next = juce::jmin(next, (int)other[IDs::start]);
+                    newLength = juce::jmax(1, next - start);
+                    break;
+                }
+            }
+            if(newStart != start || newLength != length)
+            {
+                note.setProperty(IDs::start, newStart, &getUndoManager());
+                note.setProperty(IDs::length, newLength, &getUndoManager());
+                ++changed;
+            }
+        }
+        if(changed) track->sortNotes();
+        return changed;
+    }
+
+    bool MTAudioInterface::tapTempo(double milliseconds)
+    {
+        if(getSettings().midiControl.externalClock()) { tempoTaps.reset(); return false; }
+        if(milliseconds < 0) milliseconds = juce::Time::getMillisecondCounterHiRes();
+        const auto bpm = tempoTaps.tap(milliseconds, getSettings().hardware.numTaps().getIntValue());
+        if(bpm <= 0) return false;
+        if(auto* sequence = manager->getSequence()) sequence->setBPM(juce::roundToInt(bpm));
+        else setMasterBPM(juce::roundToInt(bpm));
+        return true;
     }
 
     int MTAudioInterface::setSequenceLoop( int Sequence, bool Loop )
@@ -994,14 +1161,22 @@ namespace mt
 
     int MTAudioInterface::setSequencePause()
     {
+        releasePerformancePads();
         setSequenceRecording( false );
         return manager->pause();
     }
 
     int MTAudioInterface::setSequenceStop()
     {
+        releasePerformancePads();
         setSequenceRecording( false );
         return manager->stop();
+    }
+
+    int MTAudioInterface::getSequenceBPM(int sequence)
+    {
+        auto* data = manager ? manager->getSequence(sequence) : nullptr;
+        return data ? data->getBPM() : 120;
     }
 
     bool MTAudioInterface::isSequencePlaying()
@@ -1810,7 +1985,7 @@ namespace mt
 
     int MTAudioInterface::addLiveMidiMsg( const MTSelected& Selection, const juce::MidiMessage& Msg )
     {
-        DBG( "addLiveMidiNoteFuntion" );
+        const juce::ScopedLock guard(manager->getSequenceLock());
         if( auto t = manager->getTrack( Selection ) )
             t->processIncomingMidiMessage( Msg );
         if( seqRecording )
@@ -1818,74 +1993,183 @@ namespace mt
         return 0;
     }
 
-    void MTAudioInterface::setSequenceRecording( bool Record )
+    bool MTAudioInterface::isCountingIn() const
     {
-        if( Record == seqRecording )
-            return;
-        if( Record )
-            manager->getUndoManager().beginNewTransaction( "Record" ); // the take undoes as one step
-        else
-            for( int n = 0; n < (int)recordingNotes.size(); ++n )
-                if( recordingNotes[(size_t)n].held )
-                    finishRecordedNote( n ); // notes still held when recording ends
-        seqRecording = Record;
+        if(!manager) return false;
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        auto* sequence = manager ? manager->getSequence(recordingTarget.sequence) : nullptr;
+        return sequence && sequence->isCountingIn();
     }
 
-    void MTAudioInterface::recordLiveMidiMsg( const MTSelected& Selection, const juce::MidiMessage& Msg )
+    int MTAudioInterface::getCountInBeatsRemaining() const
     {
-        if( !isSequencePlaying() || !( Msg.isNoteOn() || Msg.isNoteOff() ) )
-            return;
-        auto* t = manager->getTrack( Selection );
-        if( !t || !t->getLengthInTicks() )
-            return;
-
-        auto& rec = recordingNotes[(size_t)Msg.getNoteNumber()];
-        if( Msg.isNoteOn() )
-        {
-            if( rec.held )
-                finishRecordedNote( Msg.getNoteNumber() );
-            rec = { Selection, t->getTickPosition(), Msg.getVelocity(), true };
-        }
-        else if( rec.held )
-            finishRecordedNote( Msg.getNoteNumber() );
+        if(!manager) return 0;
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        auto* sequence = manager ? manager->getSequence(recordingTarget.sequence) : nullptr;
+        if(!sequence) return 0;
+        const int beat = juce::jmax(1, sequence->getTicksPerBeat());
+        return (sequence->getCountInRemainingTicks() + beat - 1) / beat;
     }
 
-    void MTAudioInterface::finishRecordedNote( int Note )
+    bool MTAudioInterface::startSequenceRecording(RecordingMode mode)
     {
-        auto& slot = recordingNotes[(size_t)Note];
-        auto  rec  = slot;
-        slot.held  = false;
-
-        auto* t = manager->getTrack( rec.target );
-        if( !t || !t->getLengthInTicks() )
-            return;
-
-        // Snap the start to the sequence's TIME DIV; the length is how long the pad was held.
-        const auto lengthInTicks = t->getLengthInTicks();
-        auto*      tempo         = getTempoMgr( rec.target.sequence );
-        const int  grid          = tempo ? juce::jmax( 1, tempo->getTicksPerQuantization() ) : 1;
-        const auto start         = (unsigned int)( juce::roundToInt( rec.start / (double)grid ) * grid ) % lengthInTicks;
-        const auto now           = t->getTickPosition();
-        const auto held          = ( now + lengthInTicks - rec.start ) % lengthInTicks;
-        const int  length        = held > 0 ? (int)held : grid;
-
-        auto write = [this, Note, rec, start, length] {
-            if( !manager ) // shut down while waiting
-                return;
-            if( auto* track = manager->getTrack( rec.target ) )
-                track->addOrModifyNote( Note, (int)start, length, rec.velocity );
-        };
-
-        // Snapped forward to a point the playhead hasn't reached yet: written now, the sequencer
-        // would play it again a moment after the live hit. Write it once the playhead has passed.
-        const auto ahead = ( start + lengthInTicks - now ) % lengthInTicks;
-        if( ahead > 0 && ahead <= (unsigned int)grid && tempo && tempo->getBPM() > 0 && tempo->getTicksPerBeat() > 0 )
+        recordingError.clear();
+        if(!manager) return false;
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(seqRecording && mode == recordingMode) { setSequenceRecording(false); return true; }
+        setSequenceRecording(false);
+        auto* track = manager->getTrack(getSelected());
+        auto* sequence = manager->getSequence();
+        if(!sequence || !track) return false;
+        if((!track->getProgram() || !track->getProgram()->isAudio()) && !track->armed.get()) { recordingError = "Arm the selected track before recording"; return false; }
+        recordingAudioProgram = {};
+        if(auto* audio = dynamic_cast<MTAudioProgram*>(track->getProgram()))
         {
-            const double ms = 60000.0 * ahead / ( (double)tempo->getTicksPerBeat() * tempo->getBPM() );
-            juce::Timer::callAfterDelay( juce::roundToInt( ms ) + 20, write );
+            const auto range = track->getPlaybackLoopRange();
+            const int start = isSequencePlaying() ? juce::jlimit(range.getStart(), range.getEnd() - 1, (int)track->getTickPosition()) : range.getStart();
+            if(!audio->prepareRecording(track->getAudioPlaybackClock(), start, range.getEnd(), sequence->getBPM() * defaultPPQN / 60.0, mode == RecordingMode::Replace))
+            { recordingError = audio->getRecordingError(); return false; }
+            recordingAudioProgram = audio->getState();
+        }
+        recordingMode = mode;
+        const int countIn = !isSequencePlaying() ? juce::jlimit(0, 2, getSettings().metronome.countIn()) : 0;
+        sequence->setCountInBars(countIn);
+        setSequenceRecording(true);
+        if(!isSequencePlaying())
+        {
+            if(setSequencePlay(getSelectedSequence(), true, true) != 0) { setSequenceRecording(false); return false; }
+        }
+        if(isCountingIn()) sequence->setRecordState(RecordState::Armed);
+        beginRecordingTake();
+        return true;
+    }
+
+    void MTAudioInterface::setSequenceRecording(bool record)
+    {
+        if(record == seqRecording || !manager) return;
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(record)
+        {
+            auto* track = manager->getTrack(getSelected());
+            if(!track) return;
+            recordingTarget = getSelected();
+            recordingTrack = track->getState();
+            getUndoManager().beginNewTransaction(recordingMode == RecordingMode::Replace ? "Replace recording" : "Overdub");
+            replacePending = recordingMode == RecordingMode::Replace && !recordingAudioProgram.isValid();
+            if(auto* sequence = manager->getSequence(recordingTarget.sequence)) sequence->setRecordState(RecordState::Recording);
+            startTimer(1);
         }
         else
-            write();
+        {
+            if(recordingAudioProgram.isValid())
+            {
+                auto* audio = dynamic_cast<MTAudioProgram*>(manager->getProgramById(recordingAudioProgram.getProperty(IDs::id).toString()));
+                if(audio && audio->getState() == recordingAudioProgram)
+                {
+                    if(!audio->finishRecording()) { recordingError = audio->getRecordingError(); onRecordingError(recordingError); }
+                }
+                else { recordingError = "Audio recording target was removed; existing regions were preserved"; onRecordingError(recordingError); }
+                recordingAudioProgram = {};
+            }
+            beginRecordingTake();
+            for(int i = 0; i < (int)recordingNotes.size(); ++i)
+                if(recordingNotes[(size_t)i].held) finishRecordedNote(i);
+            if(auto* sequence = manager->getSequence(recordingTarget.sequence))
+            {
+                sequence->setRecordState(RecordState::NotArmed);
+                sequence->setCountInBars(0);
+                if(sequence->isCountingIn()) manager->stop(); // cancelling the countdown never erases notes
+            }
+            recordingTrack = {};
+            replacePending = false;
+            getUndoManager().beginNewTransaction();
+        }
+        seqRecording = record;
+    }
+
+    void MTAudioInterface::beginRecordingTake()
+    {
+        if(!seqRecording || !replacePending || isCountingIn()) return;
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        auto* track = manager->getTrack(recordingTarget);
+        auto* sequence = manager->getSequence(recordingTarget.sequence);
+        if(!track || !sequence || track->getState() != recordingTrack) return;
+        if(!sequence->hasStartedTimeline()) return;
+        // Clear the selected track's active loop once, then keep all subsequent
+        // passes additive. Notes in other tracks and outside the loop survive.
+        const auto range = track->getPlaybackLoopRange();
+        const int start = range.getStart(), end = range.getEnd();
+        auto notes = track->getNoteListVT();
+        track->stopAllMidiNotes();
+        for(int i = notes.getNumChildren(); --i >= 0;)
+        {
+            const int time = notes.getChild(i)[IDs::start];
+            if(time >= start && time < end) notes.removeChild(i, &getUndoManager());
+        }
+        replacePending = false;
+    }
+
+    void MTAudioInterface::timerCallback()
+    {
+        if(!manager) { stopTimer(); return; }
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(seqRecording)
+        {
+            auto* track = manager->getTrack(recordingTarget);
+            auto* audio = recordingAudioProgram.isValid() ? dynamic_cast<MTAudioProgram*>(manager->getProgramById(recordingAudioProgram.getProperty(IDs::id).toString())) : nullptr;
+            if(!track || track->getState() != recordingTrack || !isSequencePlaying() || (audio ? !audio->armed.get() : !track->armed.get()) || (recordingAudioProgram.isValid() && (!audio || audio->isTakeComplete() || track->getProgram() != audio))) setSequenceRecording(false);
+            else beginRecordingTake();
+        }
+        servicePadRepeats();
+        const bool repeating = noteRepeat && std::any_of(performancePads.begin(), performancePads.end(), [](const PerformancePad& p) { return p.note >= 0; });
+        if(!seqRecording && !repeating) stopTimer();
+    }
+
+    void MTAudioInterface::recordLiveMidiMsg(const MTSelected& selection, const juce::MidiMessage& message)
+    {
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        if(!seqRecording || !isSequencePlaying() || isCountingIn() || recordingAudioProgram.isValid()) return;
+        if(selection.sequence != recordingTarget.sequence || selection.track != recordingTarget.track) return;
+        auto* track = manager->getTrack(selection);
+        auto* sequence = manager->getSequence(selection.sequence);
+        if(!track || !sequence || track->getState() != recordingTrack || !track->getLengthInTicks()) return;
+        beginRecordingTake();
+        if(message.isAllNotesOff() || message.isAllSoundOff())
+        {
+            for(int n = 0; n < 128; ++n)
+            {
+                const int index = (message.getChannel() - 1) * 128 + n;
+                if(recordingNotes[(size_t)index].held) finishRecordedNote(index);
+            }
+            return;
+        }
+        if(!message.isNoteOnOrOff()) return;
+        const int index = (message.getChannel() - 1) * 128 + message.getNoteNumber();
+        auto& note = recordingNotes[(size_t)index];
+        if(note.held) finishRecordedNote(index);
+        if(message.isNoteOn())
+            note = { selection, track->getState(), track->getTickPosition(), sequence->getElapsedTicks(), message.getVelocity(), true };
+    }
+
+    void MTAudioInterface::finishRecordedNote(int index)
+    {
+        auto rec = recordingNotes[(size_t)index];
+        recordingNotes[(size_t)index] = {};
+        auto* track = manager->getTrack(rec.target);
+        auto* sequence = manager->getSequence(rec.target.sequence);
+        if(!track || !sequence || track->getState() != rec.track || !track->getLengthInTicks()) return;
+        auto timing = TimingCorrect::read(sequence->getState());
+        timing.division = sequence->getTempoSettings().getQuantizationLevel();
+        timing.barTicks = sequence->getTempoSettingsAtTick(rec.start).getTicksPerBar();
+        const int trackLength = (int)track->getLengthInTicks();
+        const auto range = track->getPlaybackLoopRange();
+        const int loopStart = range.getStart(), span = range.getLength();
+        const int snapped = timing.correct((int)rec.start);
+        const int start = loopStart + ((snapped - loopStart) % span + span) % span;
+        const auto elapsed = sequence->getElapsedTicks();
+        const int held = elapsed >= rec.elapsed ? (int)juce::jmin(uint64_t(trackLength), elapsed - rec.elapsed) : 0;
+        const int length = held > 0 ? held : 1;
+        track->addRecordedNote(index % 128, start, length, rec.velocity, timing.grid());
     }
 
     int MTAudioInterface::addLiveMidiNote( const MTSelected& Selection, int Note, int Velocity )

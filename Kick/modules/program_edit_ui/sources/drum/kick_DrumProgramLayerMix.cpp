@@ -23,7 +23,7 @@ namespace kick_ui
 {
 
     DPLayerMix::DPLayerMix( std::vector<int>& Pads, mt::MTDrumProgram*& PDrum )
-        : pads( Pads ), pDrum( PDrum ), KickGrid( 4, 4 )
+        : pads( Pads ), pDrum( PDrum ), KickGrid( 4, 6 )
     {
         setRowTitles( { "LAYER 1", "LAYER 2", "LAYER 3", "LAYER 4" } );
 
@@ -57,6 +57,14 @@ namespace kick_ui
             addComponent( fine[i], i, 1 );
             addComponent( amp[i], i, 2 );
             addComponent( pan[i], i, 3 );
+            velocityLow[i].setTitle("VEL LOW"); velocityHigh[i].setTitle("VEL HIGH");
+            velocityLow[i].setRange(0, 127, 1); velocityHigh[i].setRange(0, 127, 1);
+            velocityLow[i].setComponentID("layer-velocity-low-" + juce::String(i));
+            velocityHigh[i].setComponentID("layer-velocity-high-" + juce::String(i));
+            addComponent(velocityLow[i], i, 4); addComponent(velocityHigh[i], i, 5);
+            velocityLow[i].onValueChanged = [&, i](double v) { if(pDrum && !pads.empty()) { pDrum->setLayerVelocityStart(pads[0], i, (int)v); refresh(); } };
+            velocityHigh[i].onValueChanged = [&, i](double v) { if(pDrum && !pads.empty()) { pDrum->setLayerVelocityEnd(pads[0], i, (int)v); refresh(); } };
+
 
             semi[i].onValueChanged = [&, i]( juce::int64 Value ) {
                 if( pDrum )
@@ -96,6 +104,9 @@ namespace kick_ui
                 fine[index].setValue( pDrum->getLayerFine( pads[0], index ), juce::dontSendNotification );
                 amp[index].setValue( CommonUtils::gainToMidi( pDrum->getLayerGain( pads[0], index ) ), juce::dontSendNotification );
                 pan[index].setValue( pDrum->getLayerPan( pads[0], index ), juce::dontSendNotification );
+                velocityLow[index].setValue(pDrum->getLayerVelocityStart(pads[0], index), juce::dontSendNotification);
+                velocityHigh[index].setValue(pDrum->getLayerVelocityEnd(pads[0], index), juce::dontSendNotification);
+
             }
         }
     }
@@ -105,6 +116,7 @@ namespace kick_ui
         if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
             auto padNum = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
+            if(pads.empty()) return;
             pads[0]     = padNum + mt::getAudioInterface().getBankOffset();
             refresh();
         }

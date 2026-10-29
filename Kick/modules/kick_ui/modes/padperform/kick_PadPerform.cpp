@@ -44,6 +44,7 @@ namespace kick_ui
             auto             padNo      = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
             auto             padState   = contracts::DclContractsHelper::getPadState( f_HwMsg );
             auto             velocity   = contracts::DclContractsHelper::getPadVelocity( f_HwMsg );
+            velocity = ae.getPadVelocity(padNo, velocity);
             std::vector<int> pads;
 
             padNo += bankOffset;

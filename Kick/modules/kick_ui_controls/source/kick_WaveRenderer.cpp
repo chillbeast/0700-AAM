@@ -64,7 +64,7 @@ namespace ui
     }
     void WaveRenderer::changeAmplitude( juce::AudioSampleBuffer& buffer, double Level )
     {
-        double scalingFactor = std::pow( 2.0, Level / 12.0 );
+        double scalingFactor = juce::Decibels::decibelsToGain(juce::jlimit(-60.0, 12.0, Level));
         for( int channel = 0; channel < buffer.getNumChannels(); ++channel )
         {
             buffer.applyGain( channel, 0, buffer.getNumSamples(), scalingFactor );

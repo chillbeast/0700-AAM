@@ -109,7 +109,7 @@ namespace kick_ui
         ui::KickSlider        level{ "Level", juce::Slider::LinearBar };
         ui::KickToggleOptions onOffButton{ "ENABLE", { "Off", "On" } };
         ui::KickListBox       mode{ "MODE", { "RECORD", "PLAY", "RECORD + PLAY" } };
-        ui::KickListBox       countIn{ "COUNTIN", { "Off" } };
+        ui::KickListBox       countIn{ "COUNT IN", { "Off", "1 bar", "2 bars" } };
         ui::KickListBox       rate{ "RATE", { "1/16", "1/8", "1/4", "1/2" }, 2 };
         ui::KickListBox       style{ "STYLE", { "STYLE-1", "STYLE-2", "STYLE-3", "STYLE-4", "STYLE-5", "STYLE-6", "STYLE-7" }, 0, 2 };
 

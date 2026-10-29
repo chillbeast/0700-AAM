@@ -133,6 +133,7 @@ namespace mt
         int humanizeNotes( const track::humanizeInfo& Info, juce::ValueTree& vTree, juce::Random& r, bool& isSort );
         int randomNotes( const track::randomEventsInfo& Info );
         int pitchQuantizeNotes( const track::pitchQuantizeInfo& Info );
+        void sortNotes() { sort(); }
         int pitchQuantizeNotes( const track::pitchQuantizeInfo& Info, juce::ValueTree& Notes );
 
         void setMidiList( juce::MidiMessageSequence* MidiList );

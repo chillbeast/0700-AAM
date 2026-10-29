@@ -26,6 +26,7 @@
 #include "mt_audio_timebase_types.h"
 #include "mt_midi_interface_types.h"
 #include "mt_audio_transport.h"
+#include "mt_audio_timing.h"
 #include "mt_audio_interface_looper.h"
 
 namespace mt
@@ -57,6 +58,8 @@ namespace mt
         static sigslot::signal<int> onTick;
         static sigslot::signal<int> onLoopBegin;
         static sigslot::signal<int> onLoopEnd;
+        static sigslot::signal<bool> onCountIn;
+        static sigslot::signal<bool> onMetronome;
         static sigslot::signal<>    onNote;
         static sigslot::signal<>    on1_2;
         static sigslot::signal<>    on1_2T;
@@ -120,6 +123,7 @@ namespace mt
 
     class MTAudioInterface
         : public MTLooperInterface
+        , private juce::Timer
     {
     public:
         explicit MTAudioInterface( const char* Name, const char* Manufacturer, const char* Version );
@@ -143,6 +147,8 @@ namespace mt
         bool loadProject( juce::File& ProjectFile );
         bool closeProject();
         bool saveProject();
+        bool createProject(const juce::File& folder);
+        const juce::String& getLastProjectError() const { return projectError; }
 
         // Master API's....
         const int         getMasterBPM();
@@ -270,11 +276,16 @@ namespace mt
         MTTempoMgr* getTempoMgr( int Sequence );
 
         int setSequenceBPM( int Sequence, int Bpm );
+        int getSequenceBPM(int Sequence);
         int setSequenceLength( int Sequence, int Bars );
         int setSequenceLength( int Sequence, float Multiplier = 1.0f );
         int copyTrackBars( const SequenceCopyBars& copyBars );
         int modifySequenceLength( int Sequence, int ModifyBars, bool Insert = true, int AtBarPosition = -1 );
         int setTimeSignature( int Sequence, int Numerator, int Denominator );
+        TimingCorrect getTimingCorrect();
+        void setTimingCorrect(const TimingCorrect&);
+        int applyTimingCorrect(const MTSelected&, const TimingCorrect&);
+        bool tapTempo(double Milliseconds = -1);
         int setSequenceLoop( int Sequence, bool Loop );
         int setSequenceLoopStart( int Sequence, int StartBar );
         int setSequenceLoopEnd( int Sequence, int EndBar );
@@ -463,6 +474,26 @@ namespace mt
         // one undo step. Turning it off, or stopping / pausing, ends the take.
         void setSequenceRecording( bool Record );
         bool isSequenceRecording() const noexcept { return seqRecording; }
+        enum class RecordingMode { Replace, Overdub };
+        bool startSequenceRecording(RecordingMode);
+        RecordingMode getRecordingMode() const { return recordingMode; }
+        const juce::String& getLastRecordingError() const { return recordingError; }
+        std::function<void(const juce::String&)> onRecordingError = [](const juce::String&) {};
+        bool isCountingIn() const;
+        int getCountInBeatsRemaining() const;
+        int pressPerformancePad(int Pad, int Note, int Velocity);
+        void releasePerformancePad(int Pad);
+        void pressurePerformancePad(int Pad, int Value);
+        void releasePerformancePads();
+        void setNoteRepeat(bool Enabled);
+        void setRepeatLatch(bool Enabled);
+        void setSixteenLevels(bool Enabled);
+        bool isNoteRepeat() const { return noteRepeat; }
+        bool isRepeatLatched() const { return repeatLatch; }
+        bool isSixteenLevels() const { return sixteenLevels; }
+        void setFixedPadVelocity(int Velocity) { fixedPadVelocity = Velocity == 64 || Velocity == 127 ? Velocity : 0; }
+        int getFixedPadVelocity() const { return fixedPadVelocity; }
+        int getPadVelocity(int Pad, int Velocity) const;
 
         // Asset Manager...
         int getNumFolders();
@@ -611,17 +642,41 @@ namespace mt
     private:
         std::unique_ptr<MTAudioManager> manager;
         MTPadColors                     keyGroupPadColour;
+        TapTempo tempoTaps;
 
         // Live recording (message thread).
         struct RecordingNote
         {
             MTSelected   target{};
+            juce::ValueTree track;
             unsigned int start{ 0 };
+            uint64_t elapsed{0};
             int          velocity{ 0 };
             bool         held{ false };
         };
         bool                         seqRecording{ false };
-        std::array<RecordingNote, 128> recordingNotes{};
+        RecordingMode recordingMode{RecordingMode::Overdub};
+        MTSelected recordingTarget{};
+        juce::ValueTree recordingTrack;
+        juce::ValueTree recordingAudioProgram;
+        juce::String recordingError;
+        juce::String projectError;
+        bool replacePending{false};
+        std::array<RecordingNote, 16 * 128> recordingNotes{};
+        void beginRecordingTake();
+        void timerCallback() override;
+        struct PerformancePad
+        {
+            MTSelected target{};
+            juce::ValueTree track;
+            int note{-1}, velocity{0};
+            bool down{false}, sounding{false}, clocked{false};
+            double next{0}, gateEnd{0};
+        };
+        std::array<PerformancePad, 16> performancePads{};
+        bool noteRepeat{false}, repeatLatch{false}, sixteenLevels{false};
+        int fixedPadVelocity{0}, lastPadNote{0}, sixteenNote{0};
+        void servicePadRepeats();
         void recordLiveMidiMsg( const MTSelected& Selection, const juce::MidiMessage& Msg );
         void finishRecordedNote( int Note );
     }; // Class MTAudioInterface

@@ -228,6 +228,9 @@ namespace mt
     public:
         KickSettings();
         void makeDefaults( void );
+        std::function<void(bool, int)> onProjectAutosaveChanged = [](bool, int) {};
+        int projectAutosaveInterval() const;
+        void applyProjectAutosave() { onProjectAutosaveChanged(projects.isAutoSave(), projectAutosaveInterval()); }
 
     public:
         KickProjectsDefault  projects;

@@ -49,6 +49,7 @@
 namespace kick_ui
 {
     class KickLEDs : private mt::MTAudioInterfaceListener
+        , private juce::Timer
     {
     public:
         KickLEDs();
@@ -64,6 +65,8 @@ namespace kick_ui
         void onProgramListChanged() override;
         void changePadColours( const juce::String& Program, const mt::MTProgramType Type );
         void sendPadSettings();
+        void timerCallback() override;
+        std::map<int, bool> performanceLEDs;
 
     private:
         mt::MTAudioInterface&               ae{ mt::getAudioInterface() };

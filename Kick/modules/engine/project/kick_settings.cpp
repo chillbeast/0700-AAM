@@ -56,6 +56,16 @@ namespace mt
 
         // Enable auto-save for settings file.
         setAutoSave( true );
+        projects.isAutoSave.onValueChanged = [this] { applyProjectAutosave(); };
+        projects.saveAfter.onValueChanged = [this] { applyProjectAutosave(); };
+    }
+
+    int KickSettings::projectAutosaveInterval() const
+    {
+        const auto text = projects.saveAfter().trim(); const int value = text.getIntValue();
+        if(value <= 0 || (!text.containsIgnoreCase("sec") && !text.containsIgnoreCase("min"))) return 30000;
+        const int64_t time = int64_t(value) * (text.containsIgnoreCase("min") ? 60000 : 1000);
+        return (int)juce::jlimit<int64_t>(15000, 300000, time);
     }
 
     void KickSettings::makeDefaults()
@@ -176,6 +186,7 @@ namespace mt
 
     juce::File KickProjectsDefault::getProjectPath( juce::File& ProjectFile )
     {
+        if(ProjectFile.existsAsFile() && ProjectFile.hasFileExtension(__projectFileSuffix)) return ProjectFile;
         if( ProjectFile.exists() )
         {
             juce::File dir     = ProjectFile.exists() ? ProjectFile.isDirectory() ? ProjectFile : ProjectFile.getParentDirectory() : ProjectFile;
@@ -369,6 +380,7 @@ namespace mt
         style.attachTo( vTree, IDs::type, Undo, 0 );
         mode.attachTo( vTree, IDs::mode, Undo, 1 );
         source.attachTo( vTree, IDs::source, Undo, MStyle0 );
+        countIn.attachTo(vTree, IDs::countIn, Undo, 0);
     }
 
     bool KickMetronome::isValid() { return vTree.hasType( IDs::METRONOME ); }

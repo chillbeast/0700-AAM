@@ -38,6 +38,7 @@ private:
     void timerCallback();
     void onTrackListChanged( int Sequence ) override;
     void onProjectLoaded( juce::File ) override;
+    void onProjectClose() override;
     void onTrackSelectionChange( const mt::MTSelected& Selected ) override;
     void visibilityChanged() override;
     void onTrackMetersUpdated() override;

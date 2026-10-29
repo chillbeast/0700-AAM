@@ -52,6 +52,7 @@ namespace mt
         bool isNotPlaying() { return TransportState::Playing != getTransportState(); }
         bool isStopped() { return TransportState::Stopped == getTransportState(); }
         bool isPaused() { return TransportState::Paused == getTransportState(); }
+        bool isSongTransportActive() const { return songPlaying; }
 
         int  play( int Seq, bool FromBeginning, bool Now );
         int  play( int Seq );

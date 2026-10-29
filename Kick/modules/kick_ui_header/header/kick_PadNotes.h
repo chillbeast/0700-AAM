@@ -41,7 +41,7 @@ namespace kick_ui
             if( !juce::isPositiveAndBelow( Pad, (int)held.size() ) || held[(size_t)Pad].note < 0 )
                 return;
             const auto& h = held[(size_t)Pad];
-            mt::getAudioInterface().addLiveMidiMsg( h.target, juce::MidiMessage::aftertouchChange( 1, h.note, juce::jlimit( 0, 127, Value ) ) );
+            mt::getAudioInterface().pressurePerformancePad(Pad, Value);
         }
 
         static int press( int Pad, int Velocity )
@@ -50,14 +50,15 @@ namespace kick_ui
             if( !juce::isPositiveAndBelow( Pad, (int)held.size() ) )
                 return -1;
 
-            const auto note = noteForPad( Pad );
+            auto note = noteForPad( Pad );
             if( note < 0 )
                 return -1;
 
             release( Pad ); // re-press without a release
             auto& ae  = mt::getAudioInterface();
             held[(size_t)Pad] = { note, ae.getSelected() };
-            ae.addLiveMidiMsg( ae.getSelected(), juce::MidiMessage::noteOn( 1, note, (juce::uint8)juce::jlimit( 1, 127, Velocity ) ) );
+            note = ae.pressPerformancePad(Pad, note, Velocity);
+            held[(size_t)Pad].note = note;
             return note;
         }
 
@@ -71,7 +72,7 @@ namespace kick_ui
             held[(size_t)Pad] = {};
             if( h.note < 0 )
                 return -1;
-            mt::getAudioInterface().addLiveMidiMsg( h.target, juce::MidiMessage::noteOff( 1, h.note ) );
+            mt::getAudioInterface().releasePerformancePad(Pad);
             return h.note;
         }
 

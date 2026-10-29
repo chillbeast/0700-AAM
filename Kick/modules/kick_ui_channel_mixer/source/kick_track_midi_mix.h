@@ -89,7 +89,7 @@ namespace kick_ui
         ui::KickLabel           trackHeader{ "MIDI TRACK" };
         ui::KickImageButton     icon{ "Icon" };
         ui::KickMeterHorizantal levelMeter;
-        ui::KickImageButton     armButton{ "ARM", "Arm_normal" };
+        ui::KickButton          armButton{ "ARM" };
         ui::KickImageButton     monitorButton{ "MONITOR", "Monitor_normal", "Monitor_active" };
         ui::KickImageButton     soloButton{ "SOLO", "Solo_normal", "Solo_active" };
         ui::KickImageButton     muteButton{ "MUTE", "Mute_normal", "Mute_active" };

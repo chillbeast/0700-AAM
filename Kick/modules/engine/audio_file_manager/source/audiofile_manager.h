@@ -40,11 +40,13 @@ namespace mt
         void        remove( const juce::String& File );
 
         ASound::Ptr getOrLoadMetronomeSound( const juce::String& File );
+        ASound::Ptr getBuiltinClick();
 
     private:
         juce::AudioFormatManager            fmtMgr;
         juce::ReferenceCountedArray<ASound> aSounds;
         juce::ReferenceCountedArray<ASound> metronomeSounds;
+        ASound::Ptr builtinClick;
     };
 
     /// API to obtain static instance of all currently loaded Sound sample cache.

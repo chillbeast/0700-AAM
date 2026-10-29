@@ -58,7 +58,7 @@ namespace mt
         void noteOn( int Note, int Velocity ) override { pClip->noteOn( Note, Velocity ); };
         void noteOff( int Note ) override { pClip->noteOff( Note ); };
         void noteOff( std::vector<int>& Notes ) override { pClip->noteOff( Notes ); };
-        void noteOffAll() override { pClip->noteOffAll(); };
+        void noteOffAll() override { MTIProgram::noteOffAll(); pClip->noteOffAll(); };
         void noteMute( int Note, bool Mute ) override { pClip->noteMute( Note, Mute ); };
         void noteReset( int Note ) override { pClip->noteReset( Note ); };
         void noteReset( std::vector<int>& Notes ) override { pClip->noteReset( Notes ); };

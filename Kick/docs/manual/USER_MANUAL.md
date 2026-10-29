@@ -1,6 +1,6 @@
 # KICK Firmware: User Manual (community build)
 
-This manual describes community simulator v0.1.4 and the Behringer KICK firmware sources in this repository. Windows x64 and Linux x86_64 desktop builds are available. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
+This manual describes community simulator v0.1.5, including the timing/recording, program/mixer, instrument, audio and project workflow repairs. Windows x64 and Linux x86_64 desktop builds are available. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
 
 - the desktop app (`Kick.exe`);
 - the hardware simulator (`KT_KickEM.exe` on Windows, `KT_KickEM` on Linux);
@@ -132,20 +132,20 @@ On the panel, the label underneath each button is its **SHIFT** function. The to
 | **TRACK MIX** | **PAD MIX** | Track Mixer / Pad Mixer | ✅ |
 | **TRACK MUTE** | **PAD MUTE** | Track Mute / Pad Mute | ✅ |
 | **NEXT SEQ** | **FX** | Next Sequence / XY FX | ✅ |
-| **STEP SEQ** | **AUTOMATION** | Step Sequencer / *nothing yet* | ✅ / ❌ |
-| **TAP TEMPO** | **MASTER** | *nothing yet* | ❌ |
-| **NOTE REPEAT** | **LATCH** | *nothing yet* | ❌ |
-| **TC** | **ON/OFF** | *nothing yet* (Timing Correct is in List Edit) | ❌ |
+| **STEP SEQ** | **AUTOMATION** | Step Sequencer / Program Edit; global automation capture remains incomplete | ✅ / ⚠️ |
+| **TAP TEMPO** | **MASTER** | Tap tempo / Channel Mixer with master controls | ✅ |
+| **NOTE REPEAT** | **LATCH** | Toggle ordinary-pad repeats / latch repeats until STOP or release | ✅ |
+| **TC** | **ON/OFF** | Timing Correct dialog / bypass live-recording correction | ✅ |
 | **SAMPLER** | **LOOPER** | Sampler / Looper | ✅ |
 | **SAMPLE EDIT** | **LINK EDIT** | Sample Editor / Q-Link Edit | ✅ |
 | **PROGRAM EDIT** | **MIDI CONTROL** | Program Edit / MIDI Control | ✅ |
 | **MENU** | **PREFS** | Menu / Preferences | ✅ |
-| **16 LEVELS** | **NOTES** | *nothing yet* / Pad Perform ("Pad Notes") | ❌ / ✅ |
-| **FULL LEVEL** | **HALF LEVEL** | Fixed-velocity toggles. Only the Step Sequencer reads them. | ⚠️ |
+| **16 LEVELS** | **NOTES** | Sixteen velocities of the last played pad note / Pad Perform | ✅ |
+| **FULL LEVEL** | **HALF LEVEL** | Toggle fixed velocity 127 / 64 for live pads and step entry; press again to restore incoming velocity | ✅ |
 | **ERASE** | | Deletes selected notes in Grid; clears a pad in Assign Sample | 🔍 |
 | **COPY** | | Duplicates the selected notes in Grid | 🔍 |
-| **LINK** | | Stub; no visible effect | ❌ |
-| **BACK** | | No effect. Use the on-screen ← arrow instead. | ❌ |
+| **LINK** | | Open Q-Link assignments | ✅ |
+| **BACK** | | Dismiss a dialog or return from a pushed screen | ✅ |
 | **− / +** | | Step the focused value down or up | 🔍 |
 | **Banks A–D** | **E–H** | Pick the pad bank (16 pads × 8 banks = 128 notes) | ✅ |
 | **PLAY / PLAY START / STOP** | | Transport (see below) | ✅ |
@@ -299,7 +299,7 @@ The **⋯ Sequence Options** menu offers:
 - **Copy Sequence**
 - **Clear**
 
-*Time Signature* is listed but doesn't do anything yet.
+**Time Signature** opens a beats-per-bar/beat-unit dialog. Stop playback before applying it. The change updates the whole sequence, including derived track/bar lengths, and supports undo. Global BPM retains the sequence's meter; a per-bar meter editor is not provided.
 
 ### Track tab 🔍
 
@@ -315,7 +315,7 @@ Each track row has:
 | Mute / Solo | |
 | Meter | |
 
-The **Arm** and **Monitor** buttons don't do anything yet.
+**ARM** now controls whether the selected note track can record. **MONITOR** controls live MIDI/pad audition; turning it off releases held notes while sequencer playback remains available. Both settings save with the track and default on for compatibility. Audio programs have separate ARM/MONITOR and input controls in Track Mixer; see audio-track recording below.
 
 **Changing a track's program or type:** tap the program icon on the left of the track row to open **Select Program**.
 
@@ -472,8 +472,8 @@ When you let go of a pad, the note it started is always the one that stops. This
 - **Banks A–H** choose step pages 1–8. In **Pad Select** mode they change pad bank instead.
 - **Pad Select** mode: pads choose which sound to edit instead of toggling steps. The chosen pad lights green.
 - **Velocity of new steps:**
-  - With **HALF LEVEL** lit, a new step takes the velocity you hit the pad with.
-  - With **FULL LEVEL** lit, it uses the default velocity.
+  - **HALF LEVEL** uses velocity 64; **FULL LEVEL** uses 127. With both off, a pad uses incoming velocity.
+  - Triplets and odd meters include the last partial page/step. Bank buttons select pages; unused pads do nothing, and a partial final step ends at the bar boundary.
 
 ### Other controls
 
@@ -496,30 +496,23 @@ If the project has no tracks, the screen says so. Create a track first (section 
 
 ## 8a. Recording pads into a sequence ✅
 
-Recording works on any screen except the Sampler and Looper, which use REC for audio:
+The normal REC/OVERDUB actions record notes/pads into the selected track. Sampler and Looper keep their own audio-recording controls.
 
-1. **Select the track** you want to record into (status bar, or the Track tab in Main).
-2. **Set TIME DIV** in the Grid (1/16 by default). Recorded hits snap to it.
-3. **Press REC** (or OVERDUB). The REC light comes on. If the sequence was stopped, it starts from the top.
-4. **Play the pads.** Each hit is written into the track at the nearest TIME DIV step.
-   - The note's length is how long you held the pad.
-   - Recording loops with the track, so you can keep adding parts on each pass.
-5. **Press REC again, or STOP,** to finish the take. The light goes off.
+1. **Select a note/pad track** and set **TIME DIV**, or open **TC** for division, swing, shift, window and strength. **SHIFT + TC (ON/OFF)** toggles live-recording correction; when off, incoming onsets are retained.
+2. Open the header's **Metronome** settings and choose **COUNT IN: Off, 1 bar or 2 bars**. The count-in uses the sequence clock and starting meter. A generated click is available when factory samples are absent, and the status bar shows beats remaining. A count-in sounds even with normal metronome playback disabled.
+3. Press **REC** to replace the selected track's active loop, or **OVERDUB** to preserve it. If stopped, playback begins from the loop start after the configured count-in. Starting a take during playback begins immediately.
+4. Play the pads or an external MIDI source accepted by the track's input-port/channel settings. A take retains its initial track; held-note releases remain associated with that track if selection changes. Held durations are retained across loop boundaries, up to the track length.
+5. Press the active record button again, or **STOP**, to finish. With looping off, playback and the take finish at the sequence end. REC and OVERDUB have separate LEDs. STOP works across screens, ends count-in and releases repeated/latched notes.
 
-**How takes are kept:**
-- Takes always add notes. Nothing already in the track is erased.
-- **Undo** removes the whole take in one step.
+**Replace policy:** REC clears note onsets inside the selected track's playback loop once, at the recording downbeat. Other tracks and notes outside that range survive. Later passes add notes. Cancelling count-in before the downbeat preserves existing notes. One undo restores the replaced material and removes the take; OVERDUB also forms one undo step.
 
-**Notes and limits:**
-- A hit that snaps forward to a step the playhead hasn't reached yet is written just after the playhead passes. That way it doesn't sound twice.
-- Instrument (Plugin) tracks record the notes from their pad layout, and MIDI coming in on a track is recorded the same way.
-- There's no count-in or swing yet.
+**Performance controls:** play the reference pad, then enable **16 LEVELS** to play that note at sixteen increasing velocities (pad 1 = 8; pad 16 = 127). These are velocity levels; pitch-based levels are not provided. **FULL LEVEL** fixes velocity at 127 and **SHIFT + FULL LEVEL (HALF LEVEL)** at 64; press the active setting again to restore incoming velocity. Sixteen velocity levels take precedence.
 
-The `record` self-test checks this:
-- REC turns the light on and starts playback.
-- Five pad hits become five new notes, all on the grid.
-- STOP turns the light off.
-- One undo removes the take.
+**NOTE REPEAT** repeats ordinary pad notes at the current division and swing. **SHIFT + NOTE REPEAT (LATCH)** retains repeats after pad release. Disable latch/repeat or press STOP to release them. Enable repeat before pressing pads; Pad Perform chord repeats are not provided. During playback repeats follow sequence ticks; while stopped they use the current BPM. UI/message-thread stalls can delay them, so sample-accurate scheduling remains an open capability.
+
+**TAP TEMPO** uses the configured two/four/eight taps in Preferences > Hardware. Switch bounce is ignored; a gap longer than two seconds starts a new series. Tap tempo leaves external MIDI clock in control when sync is enabled.
+
+The focused engine checks cover recording, cancellation, undo, reload, meter arithmetic and note ownership. The `timing-controls` simulator check drives the real panel/dialog paths in both layouts, including partial triplet pages. Current validation results are recorded in [release notes](../../../RELEASE-NOTES.md).
 
 ---
 
@@ -549,7 +542,7 @@ Its **TC (Timing Correct)** dialog has these settings:
 - Window
 - Strength
 
-**The TC dialog doesn't apply anything yet.** Swing isn't implemented in the engine either.
+**Apply** now edits the notes and updates the playback index in one undo transaction; **Cancel** leaves the project unchanged. Choose Start, End, Length or same-pitch Legato, and All, Selected or an inclusive bar Range. Swing delays alternate grid points; 50 is straight. Window limits how far a note may be from its nearest grid point, strength controls the correction amount, and shift adds ticks. Starts clamp at zero/the track end and durations stay positive. The global toggle controls live-recording correction; explicit Apply still works when it is off.
 
 ### Next Sequence (NEXT SEQ) ✅ (opens) / 🔍 (behaviour)
 
@@ -622,16 +615,16 @@ Drum programs have five tabs:
   - Start, End, Loop Start, Loop End.
   - Semi, Fine.
   - Loop and Reverse toggles.
-- **Layer Mix:** Semi, Fine, Level and Pan for each of the 4 layers.
+- **Layer Mix:** Semi, Fine, Level, Pan, VEL LOW and VEL HIGH for each of the 4 layers.
 - **Envelopes:** one envelope each for Amplitude, Filter and Pitch.
   - Shape: AD, ADSR, AHD, AHDS or AHDSR.
-  - Each stage runs 0–127, plus Depth.
+  - Each stage runs 0–127, with separate Release, Depth and enable controls.
 - **LFO**
   - Waveform: Sine, Triangle, Saw Up, Saw Down, Square, Noise, Sample & Hold.
   - Rate: 0.1–200.
   - Amounts to Pitch, Filter, Amp and Pan.
 
-Each voice has a multimode filter in the engine (low-pass, high-pass, band-pass and others, 27 types). The Drum editor doesn't show its type, cutoff or resonance yet.
+The **Envelopes** tab now includes filter type, cutoff and resonance, plus LFO enable/rate/destination controls. The original LFO tab also has an **LFO ON** toggle. These changes are current source after v0.1.4; published v0.1.4 downloads predate them. See the shared sample voice controls below.
 
 ### Keygroup 🔍
 
@@ -649,10 +642,21 @@ Keygroup programs have the same tabs as Drum, with these differences:
     - Reverse
     - Level and Pan
 
-Two known problems:
+Mapped keygroup zones now render samples. **KEY TRACK** follows the played note relative to the zone root; turn it off to keep source pitch throughout that zone. Zone/program tuning still applies. Each zone saves its toggle and supports undo. Every matching zone in an overlapping range now plays, with its own sample mode, envelope, filter and LFO. The **ZONE** dropdown on Envelopes selects which zone to edit; that selection carries into the other tabs. A mapped pad selects the first matching zone for editing. Velocity (including velocity 127), Cycle and Random choose among assigned layers.
 
-- *Key Track* does nothing yet.
-- The **Sample Play** list is labelled in a different order from the engine, so *Note On* and *Note Off* are swapped.
+**Sample Play** labels now match the engine: One Shot ignores pad release, Note On stops on release, and Note Off starts at release. Zero-velocity MIDI releases use the original press velocity; duplicate releases and All Notes Off do not trigger another sound. KEY TRACK and MIDI CC values survive project reload.
+
+### Sample voice controls (current source)
+
+These controls apply to both Drum pads and Keygroup zones. Filter, envelopes and LFO default to bypass/off; saved settings are retained. This is a community reconstruction, and the supplied filter models approximate the unavailable original implementation.
+
+- **Filter:** Off or one of 27 filter models, cutoff 20-20,000 Hz and resonance 0-97. A filter must be selected for filter modulation to affect audio.
+- **Envelopes:** independent Amplitude, Filter and Pitch enable switches, with AD, ADSR, AHD, AHDS or AHDSR shapes. Attack/Hold/Decay/Release use 0-127 relative to the unpitched source duration, not milliseconds. Sustain is 0-127. Release is independent of Depth; ADSR/AHDSR amplitude envelopes can ring after a Note On release until the tail or sample ends. Amplitude Depth sets peak level (0 silent, 127 full); Pitch Depth reaches +24 semitones and Filter Depth reaches +4 octaves.
+- **LFO:** Sine, Triangle, Saw Up/Down, Square, Noise or Sample & Hold, at 0.1-200 Hz. Full amounts give pitch +/-2 semitones, filter +/-2 octaves, amplitude tremolo from silence to full, and stereo pan across its normalized -1 to +1 range. Phase and Sample & Hold values continue across audio blocks.
+- **Velocity layers:** VEL LOW/HIGH are inclusive hard splits from 0 to 127. Moving one past the other moves the other endpoint too. In Velocity mode, the first assigned layer containing the incoming velocity wins; gaps are silent and overlaps do not crossfade. Cycle and Random use only assigned, valid layers, including sparse slots with layer 1 empty. Bounds support undo and save with the project.
+- **Voice limits:** per-note/per-zone and program polyphony replace older voices when full, preferring voices already releasing. Mute groups still choke earlier voices. Program gain and pan apply once after voice mixing.
+
+Keygroup Sample Play is independent for each overlapping zone. Note Off zones retain the original press velocity when the release carries zero velocity; repeated releases, All Notes Off and deleted/replaced zones cannot spuriously retrigger them. All Notes Off also clears pending release triggers while the program is muted. Voice stealing replaces a voice immediately through the normal attack ramp; it does not provide a separate crossfade tail.
 
 ### Clip 🔍
 
@@ -668,24 +672,26 @@ Clip programs have two views.
   - Mute group.
   - Warp, Reverse and Fade.
 
-### Audio 🔍
+### Audio (current source)
 
-The Audio editor is an arrangement editor for an audio track.
+The Audio editor arranges playable sample regions on the selected track. Audio follows the transport, including seek, pause, independent track clocks and loop boundaries. MIDI pad notes do not launch an entire audio arrangement.
 
-- **Placing clips:** *BROWSE SAMPLES* places a sample at a BAR / BEAT / TICK position.
-- **Clip settings:** Level, Mute, Reverse and Warp.
-- **Editing:**
-  - Duplicate.
-  - Nudge, Edit Start and Edit End move by one quantize step per Q-link detent.
-- **Automation lane:** Volume, Pan, Mute and Sends 1–4.
+- **BROWSE SAMPLES** places a source at a BAR/BEAT/TICK position. Select a source region before using Pencil: clicking empty space inserts its natural duration, and dragging defines a region window. Playback ends when its trimmed source ends; a longer region does not automatically repeat the sample.
+- **Clip controls:** Mute, Level (-60 to +12 dB), Reverse, Semi, Fine and independent Fade In/Out (0-100% of region duration). Program tuning combines with region tuning. Fades retain their original timing when a region is split or REC replaces part of it. Editing a fade resets it to the selected region's current duration.
+- **Copy/Paste:** select regions, Copy, click the ruler for an edit cursor, then Paste. Relative spacing, trim, processing and shared source references are retained; pasted regions must fit inside the sequence. The clipboard works between audio programs in the same open project. Paste and Split support undo. Source WAVs are retained when region edits are undone.
+- **Split/Cut:** split selected regions at the edit cursor, or use Cut on a region. Reverse and source bounds are retained. Duplicate, Nudge and the existing start/end tools remain available; gestures and trim combinations still need listening acceptance.
+- **Automation:** Volume (0-100%), PAN (0 left, 50 center, 100 right), Mute (off/on) and Send1-4 (0-100%). Points are held until the next point; values before the first point use manual/default settings. Pencil draws points, Erase removes one, and Clear Auto clears the chosen lane. These edits support undo and save with the program. Send changes use the tick path and restore manual sends when playback stops. Global panel automation recording remains separate work.
 
-Not implemented yet:
+WARP/BPM time stretching, TC and Don't Snap remain incomplete. Turning Warp on does not establish an audio time-stretch path. Delivery follows the existing tick/audio-block infrastructure, without guaranteed sample accuracy; physical audio-device and ARM acceptance remain pending.
 
-- Fade In and Fade Out.
-- Semi, Fine and BPM (Warp turns these controls on, but they do nothing).
-- TC.
-- Don't Snap.
-- Split.
+### Audio-track recording (current source)
+
+1. Enable the intended input channels in Audio Settings. Select an Audio program/track and choose its **INPUT** in Track Mixer; **None** disconnects the input.
+2. Enable **ARM**. Enable **MONITOR** when you want to hear the input through the program's output, level, pan and inserts. Monitoring defaults off for audio programs and does not change the raw captured signal.
+3. Press **REC** to replace a range, or **OVERDUB** to add an overlapping region. Count-in finishes before capture starts. Recording uses the selected track, from the current playhead (or the loop start when stopped) to the end of its active range. It captures one pass and then turns recording off while playback can continue. STOP or disarming finishes a shorter take.
+4. The take is committed as a 24-bit stereo WAV in the project's **Recorded** folder, registered as an Audio asset and inserted as a playable region. REC changes old regions only after saving succeeds, preserving their portions outside the captured interval. Undo/redo restores region arrangements; take files remain available for recovery.
+
+Recording preallocates at most 256 MiB per take. Shorten the loop if that limit is exceeded. Failed writes preserve existing regions and show an error. Changing the input or device sample rate invalidates a pending take rather than saving mislabeled audio. Audio capture is separate from the Sampler and Looper. Input/output latency, external routing and long sessions still require physical-device acceptance.
 
 ### Instrument (Plugin) ✅
 
@@ -891,7 +897,7 @@ Instrument programs aren't supported everywhere yet:
 
 The MIDI program editor has 128 CC sliders, 16 per page.
 
-**The sliders aren't connected to the engine yet.** CCs sent through custom Q-link assignments do work.
+The sliders now edit the selected MIDI program's saved CC0-CC127 values and send on that program's MIDI channel/port. The sixteen Q-links address the active page. Switching programs replaces the bindings; missing/invalid selection disables the editor. Saved values and project undo update the controls. Custom Q-link CC assignments remain available. Physical MIDI output/loopback acceptance is separate from the simulator checks.
 
 The MIDI port, program change, bank MSB/LSB and channel are set on the Main → Program row.
 
@@ -1080,18 +1086,16 @@ The header list chooses which strips to show:
 | **Midi** | MIDI tracks: port, channel, level, mute, solo |
 | **Audio** | Audio tracks: input, output, level, pan, mute, solo, inserts |
 
-The **master strip** at the bottom has output, inserts, level, pan, mute and a meter. Its *Limiter* button does nothing yet.
+The **master strip** at the bottom has output, inserts, level, pan, mute, a meter and **Limiter**. The limiter applies to the selected output bus after inserts and gain. It links both channels, catches sample peaks immediately at a fixed 0.98 ceiling (about -0.18 dBFS), and releases over 100 ms. It adds no lookahead latency or makeup gain and defaults off. This is a sample-peak limiter; it does not guarantee inter-sample/true-peak levels. Its setting saves with the project and supports undo.
+
+**Output/Return Solo** is additive within each group: solo several strips to hear them together. Non-solo members are silenced without changing their explicit Mute settings; clearing the last solo restores those settings. Returns and outputs form independent groups, so return solo leaves its downstream output available. Solo membership saves with the project and supports undo.
 
 The Q-links edit the first visible strip: output, level, pan and mute/solo.
 
 **Known limits:**
 
-- The mute/solo you set with a Q-link changes the on-screen button only. Tap the button on screen to actually mute or solo.
-- Several buttons don't do anything yet:
-  - Monitor
-  - Arm
-  - Audio input
-  - Return/Output solo
+- Return/Output mute/solo Q-links and master mute now change audio state. Q-link behavior on other strip types still needs acceptance.
+- Audio input, ARM and MONITOR are connected. Note-track ARM/MONITOR default on; audio ARM/MONITOR default off. Each program/track saves its own settings. Physical routing and controller acceptance remain separate.
 
 ### Pad Mixer (SHIFT + TRACK MIX) ✅
 
@@ -1297,7 +1301,13 @@ The tabs, left to right:
    - Bit depth.
    - Project naming.
 
-   Of these, only the recent-project count is used today. The defaults aren't applied to new projects yet, and auto-save doesn't run.
+   **New projects** use the saved tempo, bars, numerator/denominator, sequence count and tracks per sequence. They start with one Drum program connected to those tracks. Root and scale are saved as project defaults; later-created programs inherit that key even if global preferences change. Existing projects keep their saved musical state.
+
+   **On Launch:** Selector opens the project list; New Project creates a uniquely named project using these defaults; Last Used reopens the saved project file. Missing last projects leave the selector available. The recent-project Auto Load toggle selects Last Used when enabled and Selector when disabled. Timestamp names are generated when a project is created.
+
+   **Auto Save** applies as soon as it is changed and restores at startup without opening Preferences. SAVE AFTER accepts 15/30 seconds and 1/2/5 minutes; edits remain dirty while autosave is disabled and can be saved manually. Preferences save independently. Project writes use a temporary replacement; a failed manual save reports an error and retains the previous file. Autosave is not a versioned backup.
+
+   The bit-depth preference does not change selected-track audio takes, which currently use 24-bit WAV.
 3. **Hardware**
    - Pad threshold, sensitivity and curve.
    - Velocity and aftertouch.
@@ -1349,7 +1359,7 @@ The current source-backed status is maintained in the [functionality inventory](
 - The sequencer plays note events.
 - **Sampler:** recording and trimming.
 - **Looper:** record, overdub, undo and inserts.
-- Drum programs: sample playback, envelopes and the filter.
+- Drum/keygroup programs: sample playback, filters, envelopes, LFO destinations and editable velocity ranges. Keygroups layer overlapping zones; voice limits replace older voices.
 - Instrument programs with Basic Synth, pad layouts and pad lights.
 - Program Edit for instruments.
 - **Audio device selection** with Windows native drivers and Linux ALSA/JACK; ASIO is available only in local Windows builds configured with its SDK.
@@ -1360,15 +1370,15 @@ The current source-backed status is maintained in the [functionality inventory](
 
 | Area | Missing |
 |---|---|
-| Buttons | Default TAP TEMPO/MASTER, NOTE REPEAT/LATCH, AUTOMATION, 16 LEVELS and TC/ON-OFF actions are missing. LINK's overlay and global BACK navigation are incomplete. |
-| Recording | Pad takes always add; count-in, swing and replace mode are missing. |
-| Timing | List Edit Timing Correct does not apply a transform; time-signature editing returns failure. Event delivery is batched rather than guaranteed sample-accurate. Recording grid snap and external MIDI clock do exist. |
-| FX | XY FX has no DSP connection; the Master limiter control has no engine action. |
+| Buttons | Global automation capture, pitch-based 16 Levels, repeated Pad Perform chords and the temporary LINK overlay remain absent. LINK opens the full assignment screen. |
+| Recording | Note/pad REC/OVERDUB and count-in work; selected audio tracks now record one-pass WAV takes with input/ARM/MONITOR. Capture uses the existing tick/audio-block path, without guaranteed sample accuracy. |
+| Timing | Event delivery and Note Repeat are scheduled through existing tick/message-thread paths, without guaranteed sample accuracy. A per-bar meter editor and groove-template library are not provided. |
+| FX | XY FX has no DSP connection. The selected-output master limiter is implemented. |
 | Sample Edit | Destructive Pitch Shift, Time Stretch and Bit Reduce return failure. BPM Detect currently substitutes a fixed beat count; BPM Match/To Sequence, Repeat/X-fade and some assignment/settings paths are incomplete. |
-| Programs | Dedicated drum filter controls and per-layer velocity ranges are incomplete. Keygroup KEY TRACK is unwired. MIDI CC sending exists in the engine, but the editor's state binding is incomplete. Audio Pencil, clipboard, warp and automation need further work or acceptance. |
+| Programs | Audio WARP/BPM stretching and some trim/gesture combinations still need implementation or acceptance. Pencil, clipboard, split, fades/tuning and all seven automation lanes are connected. Drum/keygroup processing, overlapping zones and voice stealing work; velocity crossfades and original filter-DSP equivalence remain outside the implemented path. |
 | Song | MIDI Export works. Rendered audio export and Convert to Sequence are missing. |
-| Mixers | Track Arm/Monitor, audio-input selection, return/output solo, pad sends/routing and individual pad meters remain incomplete. |
-| Preferences | Most project-creation defaults and startup policy are incomplete. An autosave timer exists, but restart/configuration acceptance remains open. Cache purge is incomplete. Calibration exposes four rows for eight logical CV ports. |
+| Mixers | Pad-specific sends/routing and individual pad meters remain incomplete. Input/ARM/MONITOR work for audio tracks; note-track ARM/MONITOR are connected. |
+| Preferences | Project creation defaults, launch policies and restored autosave are connected. Selected-track takes use fixed 24-bit WAV. Cache purge is incomplete. Calibration exposes four rows for eight logical CV ports. |
 | Mutes | Quantised muting and mute automation are not applied by their settings dialogs. |
 | Browser | Format Drive is intentionally hidden/unimplemented. Safe OS-level eject still requires device acceptance. |
 
@@ -1400,7 +1410,7 @@ The current source-backed status is maintained in the [functionality inventory](
 - **Dialogs and notifications in the simulator:** they open over the KICK screen, scaled with the panel. They used to cover the whole simulator window at monitor size, anchored to its top-left corner. The panel also stays usable while a dialog is open.
 - **Silent programs after reloading a project** (AudIO). Removing an object from the audio graph left it registered as an input of every bus it fed, keyed by the address of its bookkeeping record. The next object to reuse that address was treated as "already connected" and never wired to its output, so it was silent. The bus also kept reading the freed object's output buffer. Objects are now disconnected from all buses when removed. A stress test went from 16–17 silent reloads in 30 to 0 in 100.
 - **Audio object IDs** (AudIO): the ID counter was a `static` in a header, so each module counted on its own and objects could share an ID. It's now one counter for the whole program.
-- **Pad recording:** REC and OVERDUB record pads into the selected track, snapped to TIME DIV, one undo step per take (new).
+- **Pad recording:** REC replaces one active loop; OVERDUB adds. Both support count-in, optional swing/correction and one undo step per take.
 - **Sampler:** panel REC works on the Sampler screen. Pressing record while it waits for signal now cancels the arm; before, nothing responded.
 - **System Resources** shows real figures. Before, on a PC, RAM was a fixed 50 % and CPU a looping counter. There is also a new AUDIO DSP load meter and the app's own CPU and memory. On the device, RAM no longer counts disk cache as used, and CPU shows current load instead of the average since boot.
 - **Lists and tables** (Browser, program picker, mixers and others) now pick the row under the pointer. Before, in the scaled simulator or a windowed build, clicks landed on a row higher up. Q-links over lists also map to the right rows now.
@@ -1445,6 +1455,8 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 | `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads and undoes. Then adds a reverb, cables a new oscillator into the first, and saves a user preset (into the temporary prefs copy). Then switches to Legato with glide, moves the reverb, holds a pad with pressure while logging every module's activity, and deletes the preset. Then adds a Formant module, sets the arpeggiator up through ARP, holds a three-pad chord and goes back |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
 | `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
+| `program-mixer` | Exercises actual CC bindings, program switching/detachment, KEY TRACK/undo, Sample Play labels, limiter and mixer Q-link actions. |
+| `timing-controls` | Drives timing/recording controls, count-in cancellation, LEDs, dialogs, navigation and partial triplet pages with an isolated template. |
 | `record` | Records pad hits into Trap Kit and checks the grid snap, the REC light and undo. Then arms, records and stops the Sampler from the panel. |
 | `resources` | Plays a kit with System Resources open and logs its CPU, DSP, RAM and storage readings. |
 | `picker` | Switches the track to a new Plugin program through its Select Program dialog. Includes a click on the Plugin row in the scaled simulator. |

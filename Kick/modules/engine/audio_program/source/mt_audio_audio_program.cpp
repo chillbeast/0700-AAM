@@ -54,11 +54,15 @@ namespace mt
             // Inserts...
             auto vt = VT.getOrCreateChildWithName( IDs::INSERTS, nullptr );
             MTIInsertsInterface::setup( vt, UM, prog );
+            input.onValueChange.connect([this] { updateInput(); });
+            monitor.onValueChange.connect([this] { prog->monitor = monitor.get(); });
+            updateInput(); prog->monitor = monitor.get(); refresh();
         }
     }
 
     MTAudioProgram::~MTAudioProgram()
     {
+        cancelPendingUpdate();
         if( prog )
         {
             engine.removeObject( prog->getId() );
@@ -120,22 +124,18 @@ namespace mt
         p->src->loopStart = min;
     }
 
-    void MTAudioProgram::refresh()
-    {
-        MTIProgram::refresh();
-    }
-
     void MTAudioProgram::setValueForParam( const juce::String& Param, int Start, double Value )
     {
+        if(AudioAutomation::index(Param) < 0 || Start < 0 || !std::isfinite(Value)) return;
         auto vt        = vTree.getOrCreateChildWithName( "PARAMETERS", um );
         auto paramTree = vt.getOrCreateChildWithName( Param, um );
-        paramTree.setProperty( "s" + juce::String( Start ), Value, um );
+        paramTree.setProperty( "s" + juce::String( Start ), juce::jlimit(0.0, 100.0, Value), um );
     }
 
     juce::ValueTree MTAudioProgram::getParamTree( const juce::String& Param )
     {
-        auto vt        = vTree.getOrCreateChildWithName( "PARAMETERS", um );
-        auto paramTree = vt.getOrCreateChildWithName( Param, um );
+        auto vt        = vTree.getChildWithName("PARAMETERS");
+        auto paramTree = vt.getChildWithName(Param);
         return paramTree;
     }
 
@@ -156,12 +156,12 @@ namespace mt
 
     void MTAudioProgram::addSample( const juce::String& Source, int Start, int Length, int Slice )
     {
-        if( Source.isEmpty() )
+        if( Source.isEmpty() || Start < 0 || Length <= 0 )
             return;
         if( auto sample = getOrCreateAudioSample( Start ) )
         {
-            if( sample->source.get() != Source )
-                sample->setSource( Source, Slice, Start, Length );
+            sample->setSource( Source, Slice, Start, Length );
+            drawingSource = Source;
         }
     }
 
@@ -214,7 +214,7 @@ namespace mt
         {
             MTIAudio audioSample( audio, um );
 
-            if( Start >= audioSample.startTime.get() && ( Start <= ( audioSample.startTime.get() + audioSample.length.get() ) ) )
+            if( Start >= audioSample.startTime.get() && ( Start < ( audioSample.startTime.get() + audioSample.length.get() ) ) )
                 return std::make_unique<MTIAudio>(audio, um);
         }
         return nullptr;
@@ -247,8 +247,9 @@ namespace mt
         for( auto it : vt )
         {
             MTIAudio audioClip( it, um );
-            if( audioClip.startTime.get() <= Start && Start <= audioClip.startTime.get() + audioClip.length.get() )
+            if( audioClip.startTime.get() <= Start && Start < audioClip.startTime.get() + audioClip.length.get() )
             {
+                drawingSource = audioClip.source.get();
                 selectedList.addIfNotAlreadyThere( it );
                 return;
             }

@@ -29,6 +29,9 @@ namespace kick_ui
 
         addComponent( lfoType, 0, 0 );
         addComponent( rate, 0, 2 );
+        enabled.setClickingTogglesState(true); enabled.setComponentID("lfo-tab-on"); addComponent(enabled, 0, 3);
+        enabled.onClick = [&] { if(pDrum && !pads.empty()) pDrum->setLFOEnabled(pads[0], enabled.getToggleState()); };
+
         //addComponent( layer4, 1, 3 );
 
         addComponent( pitch, 1, 0 );
@@ -97,6 +100,7 @@ namespace kick_ui
         if( pDrum && pads.size() )
         {
             lfoType.setSelected( pDrum->getLFOType( pads[0] ), juce::dontSendNotification );
+            enabled.setToggleState(pDrum->getLFOEnabled(pads[0]), juce::dontSendNotification);
             rate.setValue( pDrum->getLFOFrequency( pads[0] ), juce::dontSendNotification );
             pitch.setValue( pDrum->getLFOPitch( pads[0] ), juce::dontSendNotification );
             filter.setValue( pDrum->getLFOFilter( pads[0] ), juce::dontSendNotification );
@@ -110,6 +114,7 @@ namespace kick_ui
         if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
             auto padNum = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
+            if(pads.empty()) return;
             pads[0]     = padNum + mt::getAudioInterface().getBankOffset();
             refresh();
         }
@@ -176,6 +181,7 @@ namespace kick_ui
         if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
             auto padNum = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
+            if(pads.empty()) return;
             pads[0]     = padNum + mt::getAudioInterface().getBankOffset();
             refresh();
         }

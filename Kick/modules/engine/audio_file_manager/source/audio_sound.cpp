@@ -34,6 +34,20 @@ namespace mt
         setSound( File, MaxLengthInSeconds );
     }
 
+    ASound::ASound(juce::AudioFormatManager& fmt, double rate)
+        : aFmtMgr(fmt), loaded(true), lengthInSamples((int)(rate * 0.035)), lengthInSeconds(0.035), upSampleRate(1.0), sampleRate(rate)
+    {
+        data.setSize(2, (int)lengthInSamples + 4);
+        data.clear();
+        for(int i = 0; i < lengthInSamples; ++i)
+        {
+            const double time = i / rate;
+            const float sample = (float)(0.6 * std::sin(juce::MathConstants<double>::twoPi * 1600.0 * time) * std::exp(-time * 160.0) * juce::jmin(1.0, time * 4000.0));
+            data.setSample(0, i, sample);
+            data.setSample(1, i, sample);
+        }
+    }
+
     void ASound::setSound( const juce::String& File, double MaxLengthInSeconds )
     {
         auto inFile = juce::File( File );

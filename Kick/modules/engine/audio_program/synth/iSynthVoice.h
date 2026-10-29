@@ -39,6 +39,7 @@ namespace mt
         // Getters and Setters
         inline bool isFree() { return State::FREE == state.load(); }
         inline bool isSettingup() { return State::SETUP == state.load(); }
+        bool isStopping() const { return state.load() == State::STOPPING; }
         inline bool isRunning() { return ( State::RUNNING == state.load() ) || ( State::STOPPING == state.load() ); }
         inline bool isPlayingNote( int Note ) { return isRunning() && ( noteNo == Note ); }
 
@@ -56,6 +57,8 @@ namespace mt
 
         // NOTE...
         inline int getNote() { return noteNo; }
+        uint64_t getStartOrder() const { return startOrder; }
+        void setStartOrder(uint64_t Order) { startOrder = Order; }
 
         virtual void noteOff();
         virtual void noteOn( int Note, int Velocity );
@@ -84,6 +87,7 @@ namespace mt
         double sampleRate{ 48000 };
 
         std::atomic<State> state{ State::FREE };
+        uint64_t startOrder{0};
     };
 
 } // namespace mt

@@ -163,6 +163,13 @@ void AppTrack::onProjectLoaded( juce::File )
     populate();
 }
 
+void AppTrack::onProjectClose()
+{
+    forEachRowComponent([](juce::Component* row) {
+        if(auto* component = dynamic_cast<AppTrackComponent*>(row)) component->setTrack(-1, -1);
+    });
+}
+
 void AppTrack::onTrackSelectionChange( const mt::MTSelected& Selected )
 {
     if( ae.isProjectLoaded() )
@@ -180,6 +187,7 @@ void AppTrack::onTrackListChanged( int /*Sequence*/ )
 
 void AppTrack::onTrackMetersUpdated()
 {
+    if(!ae.isProjectLoaded()) return;
     kick_ui::IRowView::forEachRowComponent( [&]( juce::Component* Comp ) {
         if( auto trkDisplay = dynamic_cast<AppTrackComponent*>( Comp ) )
             trkDisplay->updateMeter();
@@ -193,7 +201,7 @@ void AppTrack::refreshSoloMute()
     for( auto rowComp : rowComps )
     {
         auto comp = dynamic_cast<AppTrackComponent*>( rowComp );
-        comp->refreshSoloMute();
+        if(comp) comp->refreshSoloMute();
     }
 }
 

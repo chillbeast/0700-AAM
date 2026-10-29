@@ -53,6 +53,21 @@ AppTrackDisplay::AppTrackDisplay( int Seq, int Track )
     transpose.setCentered( true );
     transpose.setNumDecimalPlacesToDisplay( 0 );
 
+    arm.setComponentID("main-track-arm"); monitor.setComponentID("main-track-monitor");
+    arm.setClickingTogglesState(true); monitor.setClickingTogglesState(true);
+    arm.onClick = [this] {
+        auto* data = ae.getTrackData(seq, track); if(!data || !ae.isProjectLoaded()) return;
+        ae.getUndoManager().beginNewTransaction("Arm track");
+        if(auto* audio = dynamic_cast<mt::MTAudioProgram*>(ae.getProgramForTrack(seq, track))) audio->armed = arm.getToggleState();
+        else data->armed = arm.getToggleState();
+    };
+    monitor.onClick = [this] {
+        auto* data = ae.getTrackData(seq, track); if(!data || !ae.isProjectLoaded()) return;
+        ae.getUndoManager().beginNewTransaction("Monitor track");
+        if(auto* audio = dynamic_cast<mt::MTAudioProgram*>(ae.getProgramForTrack(seq, track))) audio->monitor = monitor.getToggleState();
+        else data->monitor = monitor.getToggleState();
+    };
+
     name.onTextChange = [&]() {
         ae.renameTrack( seq, track, name.getText() );
     };
@@ -62,6 +77,7 @@ AppTrackDisplay::AppTrackDisplay( int Seq, int Track )
     };
 
     length.onValueChanged = [&]( int Value ) {
+        if(!pTrack) return;
         if( Value > 0 && pTrack )
             pTrack->isSeqLength = false;
         else if( Value == 0 && pTrack )
@@ -122,6 +138,7 @@ AppTrackDisplay::AppTrackDisplay( int Seq, int Track )
 
 AppTrackDisplay::~AppTrackDisplay()
 {
+    cancelPendingUpdate(); recordingScope.reset(); scope.reset();
 }
 
 void AppTrackDisplay::updateThemeImages( bool loadOrUnload )
@@ -139,9 +156,11 @@ void AppTrackDisplay::updateThemeImages( bool loadOrUnload )
 
 void AppTrackDisplay::setTrack( int Seq, int Track )
 {
+    recordingScope.reset(); scope.reset(); trkMeter = nullptr;
     track  = Track;
     seq    = Seq;
     pTrack = ae.getTrackData( seq, track );
+    setEnabled(pTrack != nullptr);
 
     auto muteValueHandler        = [&]() { muteData = pTrack->mute; };
     auto soloValueHandler        = [&]() { soloData = pTrack->solo; };
@@ -155,6 +174,7 @@ void AppTrackDisplay::setTrack( int Seq, int Track )
         name.setLine2Text( pProg ? pProg->name.get() : "" );
         // Setup selector
         selector.setValues( pProg ? pProg->name.get() : "", pProg ? pProg->type.get() : mt::MTProgramType::Unknown, juce::dontSendNotification );
+        refreshRecordingControls();
     };
     auto midiPortValueHandler = [&]() {
         selMidiPort = pTrack ? pTrack->midiPort.get() : "";
@@ -193,13 +213,36 @@ void AppTrackDisplay::setTrack( int Seq, int Track )
     if( onTrackChange ) onTrackChange( track );
 }
 
+void AppTrackDisplay::refreshRecordingControls()
+{
+    recordingScope.reset();
+    auto update = [this] {
+        auto* data = ae.getTrackData(seq, track);
+        auto* audio = dynamic_cast<mt::MTAudioProgram*>(ae.getProgramForTrack(seq, track));
+        arm.setToggleState(audio ? audio->armed.get() : data && data->armed.get(), juce::dontSendNotification);
+        monitor.setToggleState(audio ? audio->monitor.get() : data && data->monitor.get(), juce::dontSendNotification);
+    };
+    if(auto* data = ae.getTrackData(seq, track))
+    {
+        recordingScope = std::make_shared<mt::Kick::ScopeTracker>();
+        data->armed.onValueChange.connect(update, recordingScope); data->monitor.onValueChange.connect(update, recordingScope);
+        if(auto* audio = dynamic_cast<mt::MTAudioProgram*>(ae.getProgramForTrack(seq, track)))
+        {
+            audio->armed.onValueChange.connect(update, recordingScope); audio->monitor.onValueChange.connect(update, recordingScope);
+        }
+    }
+    update();
+}
+
 void AppTrackDisplay::handleAsyncUpdate()
 {
 }
 
 void AppTrackDisplay::updateMeter()
 {
-    if( trkMeter->size() )
+    if(!ae.isProjectLoaded() || ae.getTrackData(seq, track) != pTrack || !pTrack) return;
+    trkMeter = &ae.getTrackMeter(seq, track);
+    if( trkMeter && trkMeter->size() >= 2 )
     {
         levelMeter.setSignalStrength( trkMeter->at( 0 ).rms, trkMeter->at( 1 ).rms );
         float rmsValue = trkMeter->at( 0 ).rms;
@@ -272,6 +315,9 @@ void AppTrackDisplay::resized()
 
 void AppTrackDisplay::refreshSoloMute()
 {
+    if(!ae.isProjectLoaded()) { setTrack(-1, -1); return; }
+    if(ae.getTrackData(seq, track) != pTrack) setTrack(seq, track);
+    if(!pTrack) return;
     auto isSoloed = ae.getNumSoloTracks( seq ) >= 1 ? true : false;
     mute.setToggleState( soloData ? false : isSoloed ? true :
                                                        muteData,

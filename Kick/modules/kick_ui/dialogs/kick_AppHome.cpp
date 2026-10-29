@@ -139,6 +139,7 @@ namespace kick_ui
         // Dialogs and notifications open over this screen, wherever it is shown
         // (full screen on the device, inset and scaled in the simulator).
         mt::utils::setPopupParent( this );
+        mt::getAudioInterface().onRecordingError = [](const juce::String& error) { mt::utils::showNotification(error); };
 
         // Setup default look and feel.
         setLookAndFeel( ui::KickLooknFeel::getLnf() );
@@ -267,6 +268,7 @@ namespace kick_ui
     void KickHome::releaseScreens()
     {
         screensReleased = true;
+        if(statusBar_) statusBar_->stopUpdates();
         currentScreen = pendingScreen = Screen::Invalid;
         cancelPendingUpdate();
         removeAllChildren();
@@ -428,6 +430,9 @@ namespace kick_ui
                 log += " In is button";
                 juce::Logger::writeToLog( log );
                 auto buttonCode = contracts::DclContractsHelper::getButtonCode( f_HwMsg );
+                // STOP always ends the sequence take/count-in and releases
+                // performance notes; screen-specific audio/song handlers still run.
+                if(buttonCode == contracts::DeviceControlContracts::EN_STOP) ae.setSequencePause();
                 if( getCurrentScreen() != Screen::MenuMidiControl )
                 {
                     log += " In screen " + juce::String( buttonCode );
@@ -460,33 +465,68 @@ namespace kick_ui
                         case contracts::DeviceControlContracts::EN_BANK_F: ae.setBank( "F" ); break;
                         case contracts::DeviceControlContracts::EN_BANK_G: ae.setBank( "G" ); break;
                         case contracts::DeviceControlContracts::EN_BANK_H: ae.setBank( "H" ); break;
+                        case contracts::DeviceControlContracts::EN_TAP_TEMPO:
+                            if(mt::getSettings().midiControl.externalClock()) mt::utils::showNotification("Tempo follows external MIDI clock");
+                            else if(ae.tapTempo()) mt::utils::showNotification("Tempo: " + juce::String(ae.getTempoMgr(ae.getSelectedSequence())->getBPM()) + " BPM");
+                            break;
+                        case contracts::DeviceControlContracts::EN_MASTER:
+                            signals::sigScreenClose(Screen::MenuChannelMixer);
+                            break;
+                        case contracts::DeviceControlContracts::EN_TC:
+                            ListEditTimingCorrect::show();
+                            break;
+                        case contracts::DeviceControlContracts::EN_ON_OFF:
+                        {
+                            auto timing = ae.getTimingCorrect(); timing.enabled = !timing.enabled;
+                            ae.setTimingCorrect(timing);
+                            mt::utils::showNotification(timing.enabled ? "Recording Timing Correct: On" : "Recording Timing Correct: Off");
+                            break;
+                        }
+                        case contracts::DeviceControlContracts::EN_NOTE_REPEAT:
+                            ae.setNoteRepeat(!ae.isNoteRepeat());
+                            mt::utils::showNotification(ae.isNoteRepeat() ? "Note Repeat: On (uses Timing Correct division)" : "Note Repeat: Off");
+                            break;
+                        case contracts::DeviceControlContracts::EN_LATCH:
+                            ae.setRepeatLatch(!ae.isRepeatLatched());
+                            mt::utils::showNotification(ae.isRepeatLatched() ? "Repeat Latch: On; STOP releases notes" : "Repeat Latch: Off");
+                            break;
+                        case contracts::DeviceControlContracts::EN_16LEVELS:
+                            ae.setSixteenLevels(!ae.isSixteenLevels());
+                            mt::utils::showNotification(ae.isSixteenLevels() ? "16 Levels: velocity of the last played note" : "16 Levels: Off");
+                            break;
                         case contracts::DeviceControlContracts::EN_HALF_LEVEL:
-
-                            contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_HALF_LEVEL ) );
-                            contracts::DclContractsHelper::setHalfLevel( true );
+                            ae.setFixedPadVelocity(ae.getFixedPadVelocity() == 64 ? 0 : 64);
+                            contracts::DclContractsHelper::setHalfLevel(ae.getFixedPadVelocity() == 64);
                             break;
                         case contracts::DeviceControlContracts::EN_FULL_LEVEL:
-                            contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_FULL_LEVEL ) );
-                            contracts::DclContractsHelper::setHalfLevel( false );
+                            ae.setFixedPadVelocity(ae.getFixedPadVelocity() == 127 ? 0 : 127);
+                            contracts::DclContractsHelper::setHalfLevel(false);
                             break;
-
                         case contracts::DeviceControlContracts::EN_LINK:
-                            if(auto* knob = dynamic_cast<KnobEdit*>(getScreen(Screen::MenuKnobEdit))) knob->knobLongPress();
+                            signals::sigScreenOpen(Screen::MenuKnobEdit);
                             break;
+                        case contracts::DeviceControlContracts::EN_AUTOMATION:
+                            signals::sigScreenClose(Screen::MenuProgramEdit);
+                            mt::utils::showNotification("Audio automation lanes are in Program Edit; global automation recording is not implemented");
+                            break;
+                        case contracts::DeviceControlContracts::EN_BACK:
+                            if(auto* modal = juce::Component::getCurrentlyModalComponent()) modal->exitModalState(UI::CANCEL);
+                            else signals::sigScreenClose(Screen::Invalid);
+                            return;
+
                         case contracts::DeviceControlContracts::EN_SAVE:
-                            ae.saveProject();
+                            if(!ae.saveProject()) mt::utils::showNotification(ae.getLastProjectError());
                             break;
 
-                        // Record pads into the sequence (the Sampler and Looper use REC themselves).
-                        // Starts playback from the top if stopped; press again, or STOP, to finish.
+                        // REC replaces the selected loop once; OVERDUB adds.
+                        // The Sampler and Looper retain their own recording modes.
                         case contracts::DeviceControlContracts::EN_RECORD:
                         case contracts::DeviceControlContracts::EN_OVERDUB:
                             if( getCurrentScreen() != Screen::MenuLooper && getCurrentScreen() != Screen::MenuSampler )
                             {
-                                const bool record = !ae.isSequenceRecording();
-                                ae.setSequenceRecording( record );
-                                if( record && !ae.isSequencePlaying() )
-                                    ae.setSequencePlay( ae.getSelectedSequence(), true, true );
+                                const auto mode = buttonCode == contracts::DeviceControlContracts::EN_RECORD ? mt::MTAudioInterface::RecordingMode::Replace : mt::MTAudioInterface::RecordingMode::Overdub;
+                                if(!ae.startSequenceRecording(mode)) mt::utils::showNotification(ae.getLastRecordingError().isNotEmpty() ? ae.getLastRecordingError() : "Select a track to record");
+                                else if(ae.isCountingIn()) mt::utils::showNotification("Count in: " + juce::String(ae.getCountInBeatsRemaining()) + " beats");
                             }
                             break;
 
@@ -528,14 +568,6 @@ namespace kick_ui
                 screen->handleCommand( f_HwMsg );
             }
 
-            // REC lights while pads are being recorded (STOP on any screen ends it).
-            static bool recordLed = false;
-            if( ae.isSequenceRecording() != recordLed )
-            {
-                recordLed = ae.isSequenceRecording();
-                contracts::DclSignals::sendCommandToDcl( recordLed ? contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_RECORD )
-                                                                   : contracts::DclContractsHelper::setLEDOFFMessage( contracts::DeviceControlContracts::EN_RECORD ) );
-            }
         }
         else if( !ui::RecentProject::isProjectLoading && contracts::DclContractsHelper::isCenterKnobMessage( f_HwMsg ) )
         {

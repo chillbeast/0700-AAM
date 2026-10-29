@@ -152,6 +152,7 @@ namespace kick_ui
             busNames.push_back( n );
         outputListBox.setListOptions( busNames );
         busNames.clear();
+        busNames.push_back("None");
         auto& inputBuses = ae.getInputBusNames();
         for( auto& bus : inputBuses )
             busNames.push_back( bus );
@@ -189,7 +190,12 @@ namespace kick_ui
         };
 
         inputListBox.onSelectionChanged = [&]( int Index, const juce::String& Option ) {
+            if(pProg) pProg->input = Option;
         };
+        armButton.setClickingTogglesState(true); monitorButton.setClickingTogglesState(true);
+        armButton.setComponentID("audio-arm"); monitorButton.setComponentID("audio-monitor"); inputListBox.setComponentID("audio-input");
+        armButton.onClick = [this] { if(pProg) pProg->armed = armButton.getToggleState(); };
+        monitorButton.onClick = [this] { if(pProg) pProg->monitor = monitorButton.getToggleState(); };
 
         outputListBox.onSelectionChanged = [&]( int Index, const juce::String& Option ) {
             if( pProg )
@@ -217,7 +223,6 @@ namespace kick_ui
         };
 
         ui::connectTheme( *this, [&]() {
-            armButton.setImages( "Arm_normal" );
             monitorButton.setImages( "Monitor_normal", "Monitor_active" );
             soloButton.setImages( "Solo_normal", "Solo_active" );
             muteButton.setImages( "Mute_normal", "Mute_active" );
@@ -229,7 +234,7 @@ namespace kick_ui
     {
         srNo.setText( juce::String( ID + 1 ) );
         progNo = ProgNo;
-        pProg  = ae.getProgram( progNo );
+        pProg  = dynamic_cast<mt::MTAudioProgram*>(ae.getProgram( progNo ));
 
         auto nameHandler   = [&]() { audioName.setText( pProg ? pProg->name.get() : "", juce::dontSendNotification ); };
         auto muteHandler   = [&]() { muteButton.setToggleState( pProg ? pProg->mute.get() : false, juce::dontSendNotification ); };
@@ -237,6 +242,9 @@ namespace kick_ui
         auto panHandler    = [&]() { panSlider.setValue( pProg ? (double)pProg->pan.get() : 0.0, juce::dontSendNotification ); };
         auto levelHandler  = [&]() { levelSlider.setValue( pProg ? (double)pProg->level.get() : 0.0, juce::dontSendNotification ); };
         auto outputHandler = [&]() { outputListBox.setSelected( pProg ? pProg->output.get() : "", juce::dontSendNotification ); };
+        auto inputHandler = [this] { inputListBox.setSelected(pProg ? pProg->input.get() : "None", juce::dontSendNotification); };
+        auto armHandler = [this] { armButton.setToggleState(pProg && pProg->armed.get(), juce::dontSendNotification); };
+        auto monitorHandler = [this] { monitorButton.setToggleState(pProg && pProg->monitor.get(), juce::dontSendNotification); };
 
         scope.reset();
         if( pProg )
@@ -249,8 +257,11 @@ namespace kick_ui
             pProg->level.onValueChange.connect( levelHandler, scope );
             pProg->pan.onValueChange.connect( panHandler, scope );
             pProg->output.onValueChange.connect( outputHandler, scope );
+            pProg->input.onValueChange.connect(inputHandler, scope);
+            pProg->armed.onValueChange.connect(armHandler, scope);
+            pProg->monitor.onValueChange.connect(monitorHandler, scope);
         }
-
+        outputHandler(); inputHandler(); armHandler(); monitorHandler();
         updateData();
     }
 
@@ -263,6 +274,8 @@ namespace kick_ui
         panSlider.setValue( 0.0, juce::dontSendNotification );
         soloButton.setToggleState( false, juce::dontSendNotification );
         muteButton.setToggleState( false, juce::dontSendNotification );
+        armButton.setToggleState(false, juce::dontSendNotification); monitorButton.setToggleState(false, juce::dontSendNotification);
+        inputListBox.setSelected("None", juce::dontSendNotification); scope.reset();
     }
 
     void AudioTrackDisplay::updateData()
@@ -288,8 +301,8 @@ namespace kick_ui
         {
             auto& in  = pProg->readInMeter();
             auto& out = pProg->readOutMeter();
-            levelMeter1.setSignalStrength( in[0].rms, in[1].rms, in[0].peak, in[0].peak );
-            levelMeter2.setSignalStrength( out[0].rms, out[1].rms, out[1].peak, out[1].peak );
+            levelMeter1.setSignalStrength( in[0].rms, in[1].rms, in[0].peak, in[1].peak );
+            levelMeter2.setSignalStrength( out[0].rms, out[1].rms, out[0].peak, out[1].peak );
         }
     }
 
@@ -308,6 +321,7 @@ namespace kick_ui
         levelSlider.setBoundsRelative( .6455f, .0892f, .1188f, .8214f );
         panSlider.setBoundsRelative( .7841f, .0892f, .0435f, .8214f );
         monitorButton.setBoundsRelative( .8465f, .5178f, .0594f, .3928f );
+        armButton.setBoundsRelative(.8465f, .0892f, .0594f, .3928f);
         soloButton.setBoundsRelative( .9108f, .0892f, .0594f, .3928f );
         muteButton.setBoundsRelative( .9108f, .5178f, .0594f, .3928f );
     }
@@ -321,7 +335,7 @@ namespace kick_ui
             case 2: panSlider.knobRotated( value ); break;
             case 3:
                 muteButton.setToggleState( value > 0, juce::dontSendNotification );
-                soloButton.setToggleState( value <= 0, juce::dontSendNotification );
+                if(pProg) pProg->mute = value > 0;
                 break;
         }
     }

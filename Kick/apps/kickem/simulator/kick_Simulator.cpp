@@ -93,6 +93,11 @@ namespace sim
     void SimulatorBoard::startSelfTest()
     {
         if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "midi-audit"
+            || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "timing-controls"
+            || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "program-mixer"
+            || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "instrument-voices"
+            || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "audio-workflow"
+            || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("project-startup")
             || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("startup"))
         { startMidiAuditTest(); return; }
         if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("midi-learn"))
@@ -1576,15 +1581,13 @@ namespace sim
             return;
         }
 
-        if( on && ( id == DCC::EN_FULL_LEVEL || id == DCC::EN_HALF_LEVEL ) )
-        {
-            fullLevelBtn.setLed( true );
-            return;
-        }
-
+        buttonLedStates[id] = on;
         auto range = ledMap.equal_range( id );
         for( auto it = range.first; it != range.second; ++it )
-            it->second->setLed( on );
+        {
+            auto* button = it->second;
+            button->setLed(buttonLedStates[button->getCode()] || buttonLedStates[button->getShiftCode()]);
+        }
     }
 
     void SimulatorBoard::paint( juce::Graphics& g )

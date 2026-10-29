@@ -130,6 +130,15 @@ namespace mt
         juce::ValueTree vt = createVTree( IDs::PROGRAM,
                                           IDs::name, Name,
                                           IDs::type, toInt( Type ) );
+        auto project = vTree.getParent();
+        if(project.hasProperty("projectDefaultRoot"))
+        {
+            const int root = juce::jlimit(0, 11, (int)project.getProperty("projectDefaultRoot"));
+            const int scale = juce::jlimit(0, (int)ScaleAndNotes::scaleNames.size() - 1, (int)project.getProperty("projectDefaultScale", 0));
+            auto performance = vt.getOrCreateChildWithName(IDs::PERFORMANCE, nullptr);
+            performance.setProperty(IDs::rootNote, Note::rootNames()[(size_t)root], nullptr); performance.setProperty(IDs::scale, ScaleAndNotes::scaleNames[(size_t)scale], nullptr);
+            PadLayout layout; layout.root = root; layout.scaleIndex = scale; layout.toTree(vt.getOrCreateChildWithName(IDs::PAD_LAYOUT, nullptr));
+        }
 
         auto prog = createProgram( vt, true );
         if( 1 == programs.size() )

@@ -20,10 +20,18 @@ namespace ui
     void LoadProjectAndAnimation::startLoading( juce::File project )
     {
         if(isThreadRunning()) return;
+        createNew = false;
         ui::RecentProject::isProjectLoading = true;
         proj                                = project;
         startThread();
         startAnimation();
+    }
+
+    void LoadProjectAndAnimation::startCreating(juce::File project)
+    {
+        if(isThreadRunning()) return;
+        createNew = true; proj = project; ui::RecentProject::isProjectLoading = true;
+        startThread(); startAnimation();
     }
 
     void LoadProjectAndAnimation::onProjectLoaded( juce::File file )
@@ -37,6 +45,14 @@ namespace ui
 
     void LoadProjectAndAnimation::run()
     {
-        mt::getAudioInterface().loadProject( proj );
+        const bool loaded = createNew ? ae.createProject(proj) : ae.loadProject(proj);
+        if(!loaded)
+        {
+            const auto error = createNew ? ae.getLastProjectError() : juce::String("Unable to load this project; check its location and contents");
+            juce::MessageManager::callAsync([this, error] {
+                if(isAnimationRunning()) stopAnimation(); ui::RecentProject::isProjectLoading = false;
+                mt::utils::showNotification(error);
+            });
+        }
     }
 }

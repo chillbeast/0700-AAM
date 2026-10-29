@@ -35,6 +35,8 @@ namespace kick_ui
         void refreshPads();
 
     private:
+        ui::KickButton enabled{"LFO ON"};
+
         std::vector<int>&   pads;
         mt::MTDrumProgram*& pDrum;
 

@@ -20,6 +20,25 @@
  */
 namespace kick_ui
 {
+    class SequenceMeterOptions : public juce::Component
+    {
+    public:
+        ui::KickNumber numerator{"BEATS PER BAR", 1, 32, 4};
+        ui::KickListBox denominator{"BEAT UNIT", {"1", "2", "4", "8", "16", "32", "64"}, 2};
+        SequenceMeterOptions(int num, int den)
+        {
+            addAndMakeVisible(numerator); addAndMakeVisible(denominator);
+            numerator.setValue(num, juce::dontSendNotification);
+            denominator.setSelected(juce::String(den), juce::dontSendNotification);
+        }
+        void resized() override
+        {
+            auto bounds = getLocalBounds().reduced(20);
+            numerator.setBounds(bounds.removeFromLeft(bounds.getWidth() / 2).reduced(10));
+            denominator.setBounds(bounds.reduced(10));
+        }
+    };
+
     class APPSequenceOptionDeleteBars : public juce::Component
     {
     public:
@@ -363,8 +382,22 @@ namespace kick_ui
                 case 1:; // Double Length
                     ae.setSequenceLength( ae.getSelectedSequence(), 2.0f );
                     break;
-                case 2:; // Time Signature
+                case 2: // Time Signature
+                {
+                    if(ae.isSequencePlaying()) { mt::utils::showNotification("Stop playback before changing the time signature"); break; }
+                    auto* tempo = ae.getTempoMgr(sel.sequence);
+                    if(!tempo) break;
+                    auto* dialog = new SequenceMeterOptions(tempo->getNumerator(), tempo->getDenominator());
+                    const auto state = ae.getSequenceState(sel.sequence);
+                    mt::utils::showOptions("TIME SIGNATURE", dialog, [dialog, state, sel](int result) {
+                        auto& audio = mt::getAudioInterface();
+                        if(result == UI::APPLY && audio.getSequenceState(sel.sequence) == state)
+                            if(audio.setTimeSignature(sel.sequence, dialog->numerator.getValue(), dialog->denominator.getSelected().getIntValue()) != 0)
+                                mt::utils::showNotification("Stop playback before changing the time signature");
+                        delete dialog;
+                    }, {0, 0, 540, 220});
                     break;
+                }
                 /* case 3: // Bounce to Sample
                 {
                     juce::File f( ae.getProjectDir().getChildFile( "test.wav" ) );

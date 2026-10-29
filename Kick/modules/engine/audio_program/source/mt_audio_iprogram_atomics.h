@@ -81,7 +81,7 @@ namespace mt
             isEnabled.attachTo( Tree, IDs::isEnabled, Undo, false );
             sync.attachTo( Tree, IDs::sync, Undo, 0 );
             type.attachTo( Tree, IDs::type, Undo, 0 );
-            freq.attachTo( Tree, IDs::freq, Undo, 0 );
+            freq.attachTo( Tree, IDs::freq, Undo, 1 );
             ampMod.attachTo( Tree, IDs::level, Undo, 0 );
             panMod.attachTo( Tree, IDs::pan, Undo, 0 );
             pitchMod.attachTo( Tree, IDs::pitch, Undo, 0 );
@@ -93,7 +93,7 @@ namespace mt
         Atomic<int>   type;
         Atomic<float> freq;
         Atomic<int>   ampMod;
-        Atomic<int>   panMod;
+        Atomic<float> panMod;
         Atomic<int>   pitchMod;
         Atomic<int>   filterMod;
 
@@ -106,11 +106,11 @@ namespace mt
         void attachTo( juce::ValueTree Tree )
         {
             auto Undo = nullptr;
-            adsrType.attachTo( Tree, IDs::type, Undo, 0 );
+            adsrType.attachTo( Tree, IDs::TYPE, Undo, (int)ADSRType::Type_ADSR );
             a.attachTo( Tree, IDs::attack, Undo, 0.f );
             h.attachTo( Tree, IDs::hold, Undo, 0.f );
             d.attachTo( Tree, IDs::decay, Undo, 0.f );
-            s.attachTo( Tree, IDs::sustain, Undo, 1.f );
+            s.attachTo( Tree, IDs::sustain, Undo, 127.f );
             r.attachTo( Tree, IDs::release, Undo, 0.f );
         }
 
@@ -133,14 +133,16 @@ namespace mt
             MTIAtomicADSR::attachTo( Tree );
             isEnabled.attachTo( Tree, IDs::isEnabled, Undo, 0.f );
             ampMod.attachTo( Tree, IDs::level, Undo, 0 );
-            panMod.attachTo( Tree, IDs::pan, Undo, 1.f );
-            velMod.attachTo( Tree, IDs::velocity, Undo, 1.f );
+            depth.attachTo(Tree, IDs::depth, Undo, 127);
+            panMod.attachTo( Tree, IDs::pan, Undo, 0 );
+            velMod.attachTo( Tree, IDs::velocity, Undo, 0 );
         }
 
         Atomic<bool> isEnabled;
         Atomic<int>  ampMod;
         Atomic<int>  panMod;
         Atomic<int>  velMod;
+        Atomic<int> depth;
     };
 
     struct MTIAtomicFilterEnvelope : public MTIAtomicADSR
@@ -151,9 +153,9 @@ namespace mt
             auto Undo = nullptr;
             MTIAtomicADSR::attachTo( Tree );
             isEnabled.attachTo( Tree, IDs::isEnabled, Undo, 0.f );
-            type.attachTo( Tree, IDs::type, Undo, 0 );
+            type.attachTo( Tree, "filterType", Undo, -1 );
             cutoff.attachTo( Tree, IDs::freq, Undo, 20000 );
-            resonance.attachTo( Tree, IDs::resonance, Undo, 10 );
+            resonance.attachTo( Tree, IDs::resonance, Undo, 0 );
             depth.attachTo( Tree, IDs::depth, Undo, 0 );
             cutoffMod.attachTo( Tree, IDs::cutoffMod, Undo, 0 );
             attackMod.attachTo( Tree, IDs::attackMod, Undo, 1.f );
@@ -193,6 +195,7 @@ namespace mt
         explicit MTIAtomicEnvelopes( juce::ValueTree Tree = juce::ValueTree{ IDs::ENVELOPE } ) { attachTo( Tree ); }
         void attachTo( juce::ValueTree Tree )
         {
+            // The editors store these as siblings on the note/zone tree.
             amp.attachTo( Tree.getChildWithName( IDs::AMPENV ) );
             filter.attachTo( Tree.getChildWithName( IDs::FILTERENV ) );
             pitch.attachTo( Tree.getChildWithName( IDs::PITCHENV ) );

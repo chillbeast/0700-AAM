@@ -36,7 +36,7 @@ namespace mt
     {
     public:
         explicit MTTrack( MTAudioManager& M, MTSequence& Seq, juce::UndoManager* UM, juce::ValueTree& VT );
-        ~MTTrack() { programDeletionConnection.disconnect(); vTree.removeListener( this ); trackPlayhead.clear(); };
+        ~MTTrack() { if(audioClock) audioClock->stop(); programDeletionConnection.disconnect(); vTree.removeListener( this ); trackPlayhead.clear(); };
 
         juce::ValueTree& getVT() { return vTree; };
         juce::ValueTree& getState() { return vTree; };
@@ -88,6 +88,7 @@ namespace mt
         bool isMidiInAllowed( const juce::String& Source, int Channel ) const noexcept;
 
         MTIProgram* getProgram() const;
+        std::shared_ptr<AudioPlaybackClock> getAudioPlaybackClock() const { return audioClock; }
         int         setProgram( MTIProgram* p );
 
         void play();
@@ -95,6 +96,9 @@ namespace mt
         void pause();
         void stop();
         void seek( int posInTicks );
+        void refreshTiming() { lengthChangeHandler(); }
+        juce::Range<int> getPlaybackLoopRange() const;
+        void addRecordedNote(int Note, int Start, int Length, int Velocity, int GuardTicks);
 
         void onTick( unsigned int Tick ) override;
         void onBeat();
@@ -146,17 +150,20 @@ namespace mt
         MTMidiMeter midiMeter{ 40 };
 
         std::multimap<unsigned int, juce::MidiMessage> queuedNotes;
+        std::map<std::pair<int, int>, uint64_t> suppressRecordedUntil;
 
         int                   noteIdx{ 0 };
         unsigned int          prevTick{ 0 };
         unsigned int          tickCtr{ 0 };
-        unsigned int          tickPos{ 0 };
+        std::atomic<unsigned int> tickPos{ 0 };
         double                levelScaler{ 1.f };
         struct LiveDestination { int note{ -1 }, channel{ 1 }; };
         std::array<std::array<LiveDestination, 128>, 16> liveDestinations{};
         int64_t tickOffset{0};
         bool scheduleStart{ true };
         juce::CriticalSection lock;
+        std::shared_ptr<AudioPlaybackClock> audioClock;
+        bool audioClockReset{true};
         sigslot::scoped_connection programDeletionConnection;
 
         std::atomic<bool>         soloMuted{ false };

@@ -33,9 +33,15 @@ namespace mt
 
         void setProgram( MTIProgram* PKeys ) override;
         void noteOn( int Note, int Velocity ) override;
+        void processNoteMessage(const juce::MidiMessage& Message);
+        void noteOffAll() override;
 
     private:
         MTKeygroupProgram*                        pKeys{ nullptr };
         std::vector<std::unique_ptr<ISynthVoice>> voices;
+        std::array<unsigned int, 128> nextLayer{};
+        struct ReleaseTrigger { int note, key, velocity; juce::ValueTree zone; };
+        std::vector<ReleaseTrigger> releaseTriggers;
+        void startZone(int Key, MTIKeys& Zone, int Note, int Velocity);
     };
 };

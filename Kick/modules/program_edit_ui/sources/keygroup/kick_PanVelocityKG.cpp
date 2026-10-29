@@ -57,7 +57,7 @@ namespace kick_ui
     {}
 
     KGLayerMix::KGLayerMix( std::vector<int>& Keys, mt::MTKeygroupProgram*& pKeyGroup )
-        : keys( Keys ), pKeygroup( pKeyGroup ), KickGrid( 4, 4 )
+        : keys( Keys ), pKeygroup( pKeyGroup ), KickGrid( 4, 6 )
     {
         setRowTitles( { "LAYER 1", "LAYER 2", "LAYER 3", "LAYER 4" } );
 
@@ -91,6 +91,14 @@ namespace kick_ui
             addComponent( fine[i], i, 1 );
             addComponent( amp[i], i, 2 );
             addComponent( pan[i], i, 3 );
+            velocityLow[i].setTitle("VEL LOW"); velocityHigh[i].setTitle("VEL HIGH");
+            velocityLow[i].setRange(0, 127, 1); velocityHigh[i].setRange(0, 127, 1);
+            velocityLow[i].setComponentID("layer-velocity-low-" + juce::String(i));
+            velocityHigh[i].setComponentID("layer-velocity-high-" + juce::String(i));
+            addComponent(velocityLow[i], i, 4); addComponent(velocityHigh[i], i, 5);
+            velocityLow[i].onValueChanged = [&, i](double v) { if(pKeygroup && !keys.empty()) { pKeygroup->setLayerVelocityStart(keys[0], i, (int)v); refresh(); } };
+            velocityHigh[i].onValueChanged = [&, i](double v) { if(pKeygroup && !keys.empty()) { pKeygroup->setLayerVelocityEnd(keys[0], i, (int)v); refresh(); } };
+
 
             semi[i].onValueChanged = [&, i]( juce::int64 Value ) {
                 if( pKeygroup )
@@ -130,6 +138,9 @@ namespace kick_ui
                 fine[index].setValue( pKeygroup->getLayerFine( keys[0], index ), juce::dontSendNotification );
                 amp[index].setValue( CommonUtils::gainToMidi( pKeygroup->getLayerGain( keys[0], index ) ), juce::dontSendNotification );
                 pan[index].setValue( pKeygroup->getLayerPan( keys[0], index ), juce::dontSendNotification );
+                velocityLow[index].setValue(pKeygroup->getLayerVelocityStart(keys[0], index), juce::dontSendNotification);
+                velocityHigh[index].setValue(pKeygroup->getLayerVelocityEnd(keys[0], index), juce::dontSendNotification);
+
             }
         }
     }
@@ -139,7 +150,10 @@ namespace kick_ui
         if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
             auto padNum = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
-            keys[0]     = padNum + mt::getAudioInterface().getBankOffset();
+            if(keys.empty()) return;
+            const int mapped = pKeygroup ? pKeygroup->getZoneKeyForNote(padNum + mt::getAudioInterface().getBankOffset()) : -1;
+            if(mapped < 0) return;
+            keys[0] = mapped;
             refresh();
         }
     }

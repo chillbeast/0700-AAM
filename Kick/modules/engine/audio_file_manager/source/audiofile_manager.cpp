@@ -96,6 +96,12 @@ namespace mt
         return nullptr;
     }
 
+    ASound::Ptr ASoundCache::getBuiltinClick()
+    {
+        if(!builtinClick) builtinClick = new ASound(fmtMgr, AUDIO_SAMPLE_RATE);
+        return builtinClick;
+    }
+
     ASound::Ptr ASoundCache::getOrLoadMetronomeSound( const juce::String& File )
     {
         for( auto it : metronomeSounds )

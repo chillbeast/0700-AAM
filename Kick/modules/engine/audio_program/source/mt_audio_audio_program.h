@@ -25,12 +25,30 @@
 
 namespace mt
 {
-    class MTAudioProgram : public MTIProgram
+    class MTAudioProgram : public MTIProgram, private juce::AsyncUpdater
         , public MTIAudioProgramData
     {
     public:
         explicit MTAudioProgram( AudIO::DawEngine& Engine, juce::ValueTree& VT, juce::UndoManager* UM = nullptr );
         virtual ~MTAudioProgram();
+        std::shared_ptr<AudioPlaybackClock> createPlaybackClock();
+        bool prepareRecording(const std::shared_ptr<AudioPlaybackClock>& clock, int startTick, int endTick, double tickRate, bool replace);
+        bool finishRecording();
+        bool isTakeComplete() const { return prog->timeline.captureDone(); }
+        const juce::String& getRecordingError() const { return recordingError; }
+        const MTMeterData& readInMeter() const override { return prog->readInputMeter(); }
+        const MTMeterData& readOutMeter() const override { return prog->readOutMeter(); }
+        void enableOutputMetering(bool enable) override { prog->enableOutputMetering(enable); }
+        void refresh() override;
+        void setSelectedAudioProperty(const juce::Identifier& property, const juce::var& value);
+        juce::ValueTree copySelectedAudio() const;
+        bool pasteAudio(const juce::ValueTree& clipboard, int atTick, int limit);
+        bool splitSelectedAudio(int atTick, double tickRate);
+        juce::String getDrawingSource() const;
+        void applySendAutomation(int tick);
+        void playbackStopped();
+        void clearAutomation(const juce::String& name);
+        void eraseAutomationPoint(const juce::String& name, int tick);
 
         void forAllAudio( const std::function<void( const juce::ValueTree& audioVT )>& func );
 
@@ -46,7 +64,7 @@ namespace mt
         void setLoopEnd( int max, int Start );
         void setLoopStart( int min, int Start );
 
-        void            selectAllSamples( bool Select ) { selectedList.clearQuick(); }
+        void selectAllSamples(bool select) { selectedList.clearQuick(); if(select) for(auto clip : sampleTree) selectedList.add(clip); }
         void            setValueForParam( const juce::String&, int Start, double Value );
         juce::ValueTree getParamTree( const juce::String& Param );
         void            eraseSelectedSample();
@@ -75,10 +93,23 @@ namespace mt
 
     protected:
     private:
+        friend struct AudioWorkflowAuditAccess;
         std::unique_ptr<MTIAudio> getOrCreateAudioSample( int Start );
 
     private:
-        void                                   refresh();
+        void handleAsyncUpdate() override { refresh(); }
+        void valueTreePropertyChanged(juce::ValueTree&, const juce::Identifier&) override;
+        void valueTreeChildAdded(juce::ValueTree&, juce::ValueTree&) override { triggerAsyncUpdate(); }
+        void valueTreeChildRemoved(juce::ValueTree&, juce::ValueTree&, int) override { triggerAsyncUpdate(); }
+        void updateInput();
+        void replaceAudioRange(int start, int end, double tickRate);
+        juce::ValueTree croppedAudio(const juce::ValueTree& clip, int start, int finish, double tickRate);
+        juce::String drawingSource;
+        bool takePrepared{false}, replaceTake{false};
+        int takeStart{0}, takeEnd{0}; double takeTickRate{0};
+        juce::File takeFile;
+        juce::String recordingError;
+        uint32_t connectedInputId{0};
         MTAudioInterface&                      ae{ getAudioInterface() };
         juce::Array<juce::ValueTree>           selectedList;
         std::vector<std::unique_ptr<MTIAudio>> selectedLists;
@@ -87,6 +118,6 @@ namespace mt
 
     private:
         AudIO::DawEngine& engine;
-        AudioProgram*     prog;
+        AudioProgram*     prog{nullptr};
     };
 } // namespace MT

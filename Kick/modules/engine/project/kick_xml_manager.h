@@ -40,13 +40,22 @@ namespace mt
         juce::ValueTree loadOrCreate( const juce::File& XMLFIle );
         void            save();
         void            close();
+        bool wasLastSaveSuccessful() const { return lastSaveSuccessful; }
+        bool isAutoSaveEnabled() const { return autoSave; }
+        int getAutoSaveInterval() const { return autoSaveTimeOutInMS; }
+        static juce::File resolveFile(const juce::File& path, const juce::String& extension)
+        {
+            return !path.isDirectory() && path.hasFileExtension(extension) ? path : path.getChildFile(path.getFileName() + extension);
+        }
 
-        void                   setAutoSave( bool AutoSave ) { autoSave = AutoSave; }
-        void                   setAutoSaveTime( int AutoSaveTimeInMS ) { autoSaveTimeOutInMS = AutoSaveTimeInMS; }
+        void setAutoSave(bool enabled);
+        void setAutoSaveTime(int milliseconds);
         juce::ValueTree&       getState() { return vt; }
         const juce::String&    getDirectory() { return xmlFileDir.getFullPathName(); }
         juce::CriticalSection& getCriticalSection() { return lock; };
 
+    protected:
+        virtual bool writeDocument(const juce::File& file, const juce::String& xml);
     private:
         void valueTreeChanged() override;
         void handleAsyncUpdate() override;
@@ -62,8 +71,8 @@ namespace mt
         juce::ValueTree       vt;
         juce::UndoManager     undo;
 
-        static bool autoSave;
-        static int  autoSaveTimeOutInMS;
+        bool autoSave{true}, dirty{false}, lastSaveSuccessful{true};
+        int autoSaveTimeOutInMS{1500};
         int         prefAutoSaveTimeOutInMS = 1500;
 
         struct pvtTimer : public juce::Timer

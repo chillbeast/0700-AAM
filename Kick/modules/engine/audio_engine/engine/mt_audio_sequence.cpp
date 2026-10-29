@@ -110,7 +110,20 @@ namespace mt
 
     MTTimeBase MTSequence::getTimeBase()
     {
-        return isMasterBPM.get() ? manager.getTimeBase() : MTTempoMgr::getTimeBase();
+        return MTTempoMgr::getTimeBase();
+    }
+
+    int MTSequence::setTimeSignature(int numerator, int denominator)
+    {
+        if(numerator < 1 || numerator > 32 || (denominator != 1 && denominator != 2 && denominator != 4 && denominator != 8 && denominator != 16 && denominator != 32 && denominator != 64)) return -1;
+        if(isPlaying) return -1; // stop first: changing bar lengths under a take is ambiguous
+        if(undoManager) undoManager->beginNewTransaction("Time signature");
+        forEachTempo([&](MTTempoSettings& tempo) {
+            tempo.setNumerator(numerator);
+            tempo.setTimebase((MTTimeBase)denominator);
+            return true;
+        });
+        return 0;
     }
 
     int MTSequence::setName( const juce::String& SeqName )
@@ -167,7 +180,7 @@ namespace mt
 
     int MTSequence::setLoopEnd( int End )
     {
-        auto end = juce::jlimit<int>( getLoopStart(), getLength(), End );
+        auto end = juce::jlimit<int>( getLoopStart() + 1, getLength(), End );
         loopEnd  = end;
         return getLoopEnd();
     }
@@ -215,12 +228,12 @@ namespace mt
 
     const double MTSequence::getLengthInSeconds()
     {
-        return isUsingMasterBPM() ? manager.getSecondsUpto( getLength() ) : MTTempoMgr::getSecondsUpto( getLength() );
+        return isUsingMasterBPM() ? 60.0 * getLengthInTicks() / (defaultPPQN * juce::jmax(1, manager.getBPM())) : MTTempoMgr::getSecondsUpto(getLength());
     }
 
     const double MTSequence::getLengthInSeconds( const MTBarNBeats& Time )
     {
-        return isUsingMasterBPM() ? manager.getSecondsUpto( Time.bar, Time.beat, Time.tick ) : getSecondsUpto( Time.bar, Time.beat, Time.tick );
+        return isUsingMasterBPM() ? 60.0 * getTicksUpto(Time.bar, Time.beat, Time.tick) / (defaultPPQN * juce::jmax(1, manager.getBPM())) : getSecondsUpto(Time.bar, Time.beat, Time.tick);
     }
 
     const double MTSequence::getLengthInMS() { return 1000.0 * getLengthInSeconds(); }
@@ -233,6 +246,14 @@ namespace mt
 
     void MTSequence::valueTreePropertyChanged( juce::ValueTree& treeWhosePropertyHasChanged, const juce::Identifier& property )
     {
+        if(treeWhosePropertyHasChanged.hasType(IDs::TEMPO) && (property == IDs::num || property == IDs::den || property == IDs::bpm))
+        {
+            initializeTickDataFromTempoSettings(getSequenceTempoSettings(sequencePlayhead.bnb.bar));
+            lengthChangeHandler();
+            for(const auto& track : tracks) track->refreshTiming();
+            setupMidiClock(sequencePlayhead.bnb.bar);
+            onTempoTimeSignatureChangeFn(getBPM(), getLength(), getNumerator(), getDenominator());
+        }
         if( vTree == treeWhosePropertyHasChanged )
         {
             if( ( property == IDs::isMasterBPM ) || ( property == IDs::bpm ) || ( property == IDs::den ) || ( property == IDs::num ) )
@@ -243,6 +264,7 @@ namespace mt
             if( ( property == IDs::length ) )
             {
                 lengthChangeHandler();
+                for(const auto& track : tracks) track->refreshTiming();
             }
         }
     }
@@ -636,11 +658,19 @@ namespace mt
 
     void MTSequence::play()
     {
+        prevTicks = 0;
+        elapsedTicks = 0;
+        sequencePlayhead.clear();
         // Setup starting tick.
-        sequencePlayhead.bnb.bar = isLooping.get() ? juce::jmax<int>( 0, loopStart.get() - 1 ) : 0;
+        sequencePlayhead.bnb.bar = isLooping.get() ? juce::jmax<int>( 0, loopStart.get() ) : 0;
 
         // Initialize
         initializeTickDataFromTempoSettings( getSequenceTempoSettings( sequencePlayhead.bnb.bar ) );
+        countInOffset = pendingCountInBars * ticksPerBar.load();
+        pendingCountInBars = 0;
+        countInRemaining = countInOffset;
+        timelineStarted = countInOffset == 0;
+        lastCountInBeat = 0;
 
         // Seek to play position.
         seek( sequencePlayhead.bnb );
@@ -656,6 +686,8 @@ namespace mt
         // Start Midi clock...
         isPlaying = true;
         setupMidiClock( sequencePlayhead.bnb.bar );
+        if(countInOffset) signals::onCountIn(true);
+        else signals::onMetronome(true);
         getMidiClock().start( true );
     }
 
@@ -673,6 +705,9 @@ namespace mt
     void MTSequence::pause()
     {
         isPlaying = false;
+        countInRemaining = 0;
+        pendingCountInBars = 0;
+        setRecordState(RecordState::NotArmed);
         getMidiClock().stop();
 
         for( const auto& it : tracks )
@@ -682,6 +717,9 @@ namespace mt
     void MTSequence::stop()
     {
         isPlaying = false;
+        countInRemaining = 0;
+        pendingCountInBars = 0;
+        setRecordState(RecordState::NotArmed);
         getMidiClock().stop();
 
         for( const auto& it : tracks )
@@ -702,69 +740,81 @@ namespace mt
         signals::onLoopEnd( LoopCount );
     }
 
-    void MTSequence::onTick( unsigned int Ticks )
+    void MTSequence::onTick(unsigned int clockTicks)
     {
-        //double start = juce::Time::getMillisecondCounterHiRes();
-        auto diff = Ticks - prevTicks;
-        prevTicks.store( Ticks );
-
-        tickPos += diff;
-        beatPos += diff;
-        barPos += diff;
-
-        pos1_2 += diff;
-        pos1_4 += diff;
-        pos1_8 += diff;
-        pos1_16 += diff;
-
-        sequencePlayhead.bnb.tick += diff;
-
-        if( barPos > ticksPerBar )
+        if(countInRemaining.load())
         {
-            barPos -= ticksPerBar; // Clear bar counter
-            beatPos = 0; // Also clear beat counter
-            onBar();
+            const unsigned beatTicks = juce::jmax(1u, ticksPerBeat.load());
+            const unsigned beat = juce::jmin(clockTicks, countInOffset - 1) / beatTicks;
+            while(lastCountInBeat < beat)
+            {
+                ++lastCountInBeat;
+                signals::onCountIn(lastCountInBeat % juce::jmax(1, getNumerator()) == 0);
+            }
+            if(clockTicks < countInOffset)
+            {
+                countInRemaining = countInOffset - clockTicks;
+                return;
+            }
+            countInRemaining = 0;
+            timelineStarted = true;
+            if(isArmed()) setRecordState(RecordState::Recording);
+            signals::onMetronome(true);
         }
+        const unsigned ticks = clockTicks >= countInOffset ? clockTicks - countInOffset : 0;
+        if(ticks < prevTicks.load()) return;
+        const unsigned diff = ticks - prevTicks.load();
+        prevTicks = ticks;
+        elapsedTicks = ticks;
 
-        if( beatPos > ticksPerBeat )
+        // Walk boundaries even when timer notifications coalesce. Tracks still
+        // receive one batch, preserving MIDI order without dropping bar/beat events.
+        for(unsigned i = 0; i < diff; ++i)
         {
-            beatPos -= ticksPerBeat; // Clear beat counter
-            onBeat();
+            if(!isLooping.get() && !manager.isSongTransportActive() && tickPos.load() + 1 >= (unsigned)lengthInTicks)
+            {
+                // Deliver the final batch without wrapping tick zero back into
+                // a non-looping take, then release notes and stop the transport.
+                const unsigned endTick = ticks - diff + i + 1;
+                elapsedTicks = endTick;
+                prevTicks = endTick;
+                for(const auto& track : tracks) track->onTick(endTick - 1);
+                tickPos = lengthInTicks;
+                sequencePlayhead.bnb = MTBarNBeats{getLength()};
+                sequencePlayhead.normized = 1.0;
+                manager.pause();
+                return;
+            }
+            ++tickPos; ++beatPos; ++barPos;
+            ++pos1_2; ++pos1_4; ++pos1_8; ++pos1_16;
+            ++sequencePlayhead.bnb.tick;
+            bool bar = false;
+            if(barPos >= juce::jmax(1u, ticksPerBar.load()))
+            {
+                barPos -= juce::jmax(1u, ticksPerBar.load());
+                beatPos = 0;
+                onBar();
+                bar = true;
+            }
+            else if(beatPos >= juce::jmax(1u, ticksPerBeat.load()))
+            {
+                beatPos -= juce::jmax(1u, ticksPerBeat.load());
+                onBeat();
+            }
+            if(pos1_2 >= juce::jmax(1u, ticksPer1_2.load())) { pos1_2 -= juce::jmax(1u, ticksPer1_2.load()); signals::on1_2(); }
+            if(pos1_4 >= juce::jmax(1u, ticksPer1_4.load())) { pos1_4 -= juce::jmax(1u, ticksPer1_4.load()); signals::on1_4(); }
+            if(pos1_8 >= juce::jmax(1u, ticksPer1_8.load())) { pos1_8 -= juce::jmax(1u, ticksPer1_8.load()); signals::on1_8(); }
+            if(pos1_16 >= juce::jmax(1u, ticksPer1_16.load())) { pos1_16 -= juce::jmax(1u, ticksPer1_16.load()); signals::on1_16(); }
+            const auto rate = getSettings().metronome.rate();
+            const unsigned interval = rate == MTMetronomeRate::MET_SEQ ? ticksPerBeat.load()
+                : rate == MTMetronomeRate::MET_1_2 ? ticksPer1_2.load()
+                : rate == MTMetronomeRate::MET_1_4 ? ticksPer1_4.load()
+                : rate == MTMetronomeRate::MET_1_8 ? ticksPer1_8.load() : ticksPer1_16.load();
+            if(bar || tickPos.load() % juce::jmax(1u, interval) == 0) signals::onMetronome(bar);
         }
-
-        // Update playhead
-        sequencePlayhead.normized = ( lengthFactor * (double)tickPos );
-
-        {
-            const juce::ScopedLock sl( lock );
-            for( const auto& it : tracks )
-                it->onTick( Ticks );
-        }
-
-        if( pos1_2 > ticksPer1_2 )
-        {
-            pos1_2 -= ticksPer1_2;
-            signals::on1_2();
-        }
-        if( pos1_4 > ticksPer1_4 )
-        {
-            pos1_4 -= ticksPer1_4;
-            signals::on1_4();
-        }
-        if( pos1_8 > ticksPer1_8 )
-        {
-            pos1_8 -= ticksPer1_8;
-            signals::on1_8();
-        }
-        if( pos1_16 > ticksPer1_16 )
-        {
-            pos1_16 -= ticksPer1_16;
-            signals::on1_16();
-        }
-        ///To Emit or Not...
-        //signals::onTick( playhead.bnb.tick );
-
-        //juce::Logger::writeToLog( "Sequence execution Time, " + juce::String( juce::Time::getMillisecondCounterHiRes() - start ) );
+        sequencePlayhead.normized = lengthFactor * tickPos.load();
+        const juce::ScopedLock sl(lock);
+        for(const auto& track : tracks) track->onTick(ticks);
     }
 
     void MTSequence::onBeat()
@@ -820,7 +870,8 @@ namespace mt
         const auto& tempoSettings = getSequenceTempoSettings( Bar );
 
         auto prevTempo = getMidiClock().getTempo();
-        auto newTempo  = tempoSettings.getBPM();
+        auto newTempo  = isUsingMasterBPM() ? manager.getBPM() : tempoSettings.getBPM();
+        initializeTickDataFromTempoSettings(tempoSettings); // meter may change without a BPM change
         if( !juce::approximatelyEqual( prevTempo, newTempo ) )
         {
             initializeTickDataFromTempoSettings( tempoSettings );

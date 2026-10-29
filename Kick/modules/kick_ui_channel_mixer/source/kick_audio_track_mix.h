@@ -42,7 +42,7 @@ namespace kick_ui
     private:
         mt::MTAudioInterface&                   ae{ mt::getAudioInterface() };
         std::shared_ptr<mt::Kick::ScopeTracker> scope;
-        mt::MTIProgram*                         pProg{ nullptr };
+        mt::MTAudioProgram*                     pProg{ nullptr };
 
         int progNo{ -1 };
 
@@ -60,7 +60,7 @@ namespace kick_ui
         ui::KickListBox outputListBox{ "OUT" };
 
         ui::KickButton      inserts{ "Inserts", "Inserts" };
-        ui::KickImageButton armButton{ "ARM", "Arm_normal" };
+        ui::KickButton armButton{ "ARM" };
         ui::KickImageButton monitorButton{ "MONITOR", "Monitor_normal", "Monitor_active" };
         ui::KickImageButton soloButton{ "SOLO", "Solo_normal", "Solo_active" };
         ui::KickImageButton muteButton{ "MUTE", "Mute_normal", "Mute_active" };

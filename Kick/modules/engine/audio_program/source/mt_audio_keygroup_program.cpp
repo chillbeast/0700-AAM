@@ -68,9 +68,34 @@ namespace mt
         }
     }
 
+    void MTKeygroupProgram::noteProcess(juce::Array<juce::MidiMessage>& messages)
+    {
+        juce::Array<juce::MidiMessage> other;
+        for(const auto& message : messages)
+            if(message.isNoteOnOrOff()) key->processNoteMessage(message);
+            else if(message.isAllNotesOff() || message.isAllSoundOff()) noteOffAll();
+            else { other.clearQuick(); other.add(message); MTIProgram::noteProcess(other); }
+    }
+
     MTIKeys* MTKeygroupProgram::getKeysClip( int Note )
     {
         return dynamic_cast<MTIKeys*>( getSample( Note ) );
+    }
+
+    MTIKeys* MTKeygroupProgram::getZoneForNote(int note)
+    {
+        const int key = getZoneKeyForNote(note);
+        return key >= 0 ? getKeysClip(key) : nullptr;
+    }
+
+    int MTKeygroupProgram::getZoneKeyForNote(int note)
+    {
+        if(!CommonUtils::isValidMidiNote(note)) return -1;
+        // Editing selects the first match; playback layers all matching zones.
+        for(auto& entry : iSampleMap)
+            if(auto* zone = dynamic_cast<MTIKeys*>(entry.second.get()))
+                if(note >= zone->minNote.get() && note <= zone->maxNote.get()) return entry.first;
+        return -1;
     }
 
     ///
@@ -100,7 +125,7 @@ namespace mt
 
     SamplePlayType MTKeygroupProgram::getNoteSamplePlay( int Note )
     {
-        if( auto p = getKeysClip( Note ) )
+        if( auto p = getZoneForNote( Note ) )
             return p->samplePlay.get();
         return SamplePlayType::ONE_SHOT;
     }

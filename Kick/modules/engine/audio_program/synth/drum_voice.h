@@ -25,65 +25,35 @@
 
 namespace mt
 {
+    // Shared sample voice for drums and keygroup zones. Parameters attach to
+    // the selected note tree while the voice is in SETUP, not while rendering.
     class DrumVoice : public ISynthVoice
     {
     public:
         using Ptr = juce::ReferenceCountedObjectPtr<DrumVoice>;
-
-        explicit DrumVoice( MTIAtomicProgramMaster& Master, ASoundSlice* Slice = nullptr )
-            : ISynthVoice( Master, Slice ) {}
-        virtual ~DrumVoice() = default;
-
-        void attachToAndReset( const juce::ValueTree& Tree, juce::UndoManager* Undo );
-        void noteOn( int Number, int Velocity ) final;
+        explicit DrumVoice(MTIAtomicProgramMaster& Master, ASoundSlice* Slice = nullptr) : ISynthVoice(Master, Slice) {}
+        void attachToAndReset(const juce::ValueTree& Tree, juce::UndoManager* Undo = nullptr);
+        void setKeygroupParameters(double Ratio, float Left, float Right) { keyRatio = Ratio; keyLeft = Left; keyRight = Right; }
+        void noteOn(int Note, int Velocity) final;
         void noteOff() final;
-
-        inline bool isTailingOff() const { return !juce::approximatelyEqual( tailOff, 0.0 ); }
-
-    private:
-        inline void update()
-        {
-            updateLFO();
-            updateEnvelopes();
-        }
-
-        inline void updateEnvelopes()
-        {
-            updateAmplitudeEnvelope( sampleLength );
-            updateFilterEnvelope( sampleLength );
-            updatePitchEnvelope( sampleLength );
-        }
-
-        void updateLFO();
-        void updateFilter( double modulation = 0.0 );
-        void updateAmplitudeEnvelope( double Length );
-        void updateFilterEnvelope( double Length );
-        void updatePitchEnvelope( double Length );
-
-        void process( juce::AudioBuffer<float>& Buffer );
+        void process(juce::AudioBuffer<float>& Buffer) final;
+        const juce::ValueTree& getZone() const { return zone; }
+        SamplePlayType getPlayMode() const { return playMode; }
+        bool isTailingOff() const { return state.load() == State::STOPPING; }
 
     private:
-        MTIAtomicLFO       pLfo;
+        void updateEnvelopes();
+        void configureEnvelope(ADSR& Envelope, const MTIAtomicADSR& Parameters);
+        juce::ValueTree zone;
+        MTIAtomicLFO pLfo;
         MTIAtomicEnvelopes pEnv;
-
-        AudIO::Panner<float> panner;
-        AudIO::LFO           lfo;
-        Filter               filter;
-
-        ADSR   ampEnv;
-        ADSR   filtEnv;
-        ADSR   pitchEnv;
-        double sampleLength{ 0 };
-
-        float lfoToAmp{ 1 };
-        float lfoToPitch{ 1 };
-        float lfoToFilter{ 0 };
-        float lfoToPan{ 0 };
-
-        float ampToVel{ 0 };
-        float ampToPan{ 0 };
-
-        double tailOff{ 0 };
+        ADSR ampEnv, filtEnv, pitchEnv;
+        Filter filter;
+        AudIO::LFO lfo;
+        AudIO::PannerFloat panner{0.f, 1.f};
+        SamplePlayType playMode{SamplePlayType::ONE_SHOT};
+        double keyRatio{1.0};
+        float keyLeft{1.f}, keyRight{1.f};
+        bool releasing{false};
     };
-
-} // namespace mt
+}

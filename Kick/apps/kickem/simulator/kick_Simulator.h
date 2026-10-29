@@ -89,6 +89,7 @@ namespace sim
         SimButton                               playStartBtn { "PLAY START", DCC::EN_PLAYSTART };
 
         std::multimap<int, SimButton*> ledMap; // BtnLedSequence id -> button(s)
+        std::map<int, bool> buttonLedStates;
         sigslot::scoped_connection     outputConnection;
         sigslot::scoped_connection     midiDevicesConnection;
         std::unique_ptr<MidiLearn> midiLearn;

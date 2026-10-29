@@ -8,6 +8,7 @@ namespace kick_ui
     KickLEDs::KickLEDs()
     {
         ae.addListener( this );
+        startTimerHz(30);
 
         // Connect signals to handle front panel activities...
         mt::signals::bankChanged.connect( [&]( int Index, juce::String Bank ) {
@@ -277,7 +278,26 @@ namespace kick_ui
 
     KickLEDs::~KickLEDs()
     {
+        stopTimer();
         ae.removeListener( this );
+    }
+
+    void KickLEDs::timerCallback()
+    {
+        using D = contracts::DeviceControlContracts;
+        auto led = [this](int id, bool enabled) {
+            auto previous = performanceLEDs.find(id);
+            if(previous != performanceLEDs.end() && previous->second == enabled) return;
+            performanceLEDs[id] = enabled;
+            contracts::DclSignals::sendCommandToDcl(enabled ? contracts::DclContractsHelper::setLEDONMessage(id) : contracts::DclContractsHelper::setLEDOFFMessage(id));
+        };
+        if(!ae.isProjectLoaded()) return;
+        led(D::EN_RECORD, ae.isSequenceRecording() && ae.getRecordingMode() == mt::MTAudioInterface::RecordingMode::Replace);
+        led(D::EN_OVERDUB, ae.isSequenceRecording() && ae.getRecordingMode() == mt::MTAudioInterface::RecordingMode::Overdub);
+        led(D::EN_NOTE_REPEAT, ae.isNoteRepeat()); led(D::EN_LATCH, ae.isRepeatLatched());
+        led(D::EN_16LEVELS, ae.isSixteenLevels());
+        led(D::EN_FULL_LEVEL, ae.getFixedPadVelocity() == 127); led(D::EN_HALF_LEVEL, ae.getFixedPadVelocity() == 64);
+        led(D::EN_ON_OFF, ae.getTimingCorrect().enabled);
     }
 
     void KickLEDs::onSequenceSelectionChange( const mt::MTSelected& Selected )
@@ -330,6 +350,8 @@ namespace kick_ui
     void KickLEDs::onProjectLoaded( juce::File )
     {
         juce::MessageManager::callAsync( [&]() {
+            if(!ae.isProjectLoaded()) return;
+            performanceLEDs.clear();
             ae.setBank( "A" );
             if( mt::getAudioInterface().getNumSequences() )
             {
@@ -341,7 +363,6 @@ namespace kick_ui
 
             contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::
                                                          setPadColorModeMessage( MTIProg ? MTIProg->colourMode.get() : mt::DIM_VELOCITY ) );
-            contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_FULL_LEVEL ) );
 
             sendPadSettings();
             projectLoadCompleted = true;
@@ -350,6 +371,9 @@ namespace kick_ui
 
     void KickLEDs::onProjectClose()
     {
+        performanceLEDs.clear();
+        contracts::DclSignals::sendCommandToDcl(contracts::DclContractsHelper::setLEDOFFMessage(contracts::DeviceControlContracts::EN_RECORD));
+        contracts::DclSignals::sendCommandToDcl(contracts::DclContractsHelper::setLEDOFFMessage(contracts::DeviceControlContracts::EN_OVERDUB));
         projectLoadCompleted = false;
     }
 

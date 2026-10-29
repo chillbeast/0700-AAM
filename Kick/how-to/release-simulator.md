@@ -13,6 +13,8 @@ Windows commands below run from the repository root with Visual Studio 2022 and 
    ```
 
 4. Run Release optimization regressions (`KICK_TEST_OPTIMIZE_ONLY=1`) and simulator checks against that build: `audit`, `audio`, `panel`, `panel-preference`, `popup` in both layouts, `instrument` and `modular`. Current source also requires `midi-learn`, `midi-learn-preference`, `midi-audit`, `startup` and `startup-shutdown` (71 focused assertions in total); the MIDI preference test shares its preceding learning run's isolated preferences. Use fresh isolated preferences for each independent case; `panel-preference` shares the preceding panel run's preferences and has no `KICKEM_LAYOUT` override. Re-run `panel` with `KICKEM_LAYOUT=original` to verify the environment override. Set `KICKEM_LOG` and `KICKEM_SHOT` to directories outside the repository. Check both exit status and the expected completion/assertion lines. Inspect full-panel screenshots. Popup and panel tests use a bundled template; instrument/Modular tests also work without commercial kits.
+   Also run `audio-workflow`, `instrument-voices`, `program-mixer` and `timing-controls` in both layouts (23, 15, 16 and 25 checks respectively). Project launch checks use `project-startup-seed` followed by `project-startup` with the same isolated preferences and projects directories: set `KICK_PROJECTS_DIR` and `KICK_EXPECT_PROJECT_POLICY` to test Selector, New Project, Last Used and Missing. These cases cover restored autosave, name collisions and closing visible track controls. The complete engine suite currently has 496 assertions.
+
 5. Commit the reviewed files. Build once more to confirm the committed tree is current, then package the clean tree:
 
    ```powershell

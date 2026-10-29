@@ -67,6 +67,7 @@ namespace mt
     juce::ValueTree projectManager::loadOrCreate( const juce::File& XMLFIle )
     {
         auto tree = KickXML::loadOrCreate( XMLFIle );
+        if(!tree.isValid()) return {};
 
         bool HasProjectSubTree = tree.getChildWithName( IDs::Project ).isValid();
 

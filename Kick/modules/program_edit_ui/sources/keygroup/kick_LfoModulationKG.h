@@ -46,6 +46,8 @@ namespace kick_ui
         void refreshKeys();
 
     private:
+        ui::KickButton enabled{"LFO ON"};
+
         std::vector<int>&       keys;
         mt::MTKeygroupProgram*& pKeyGroup;
 

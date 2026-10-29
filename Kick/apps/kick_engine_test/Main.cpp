@@ -18,6 +18,7 @@
 #include "input_events/input_events.h"
 #include "audio_engine/engine/mt_sample_editor_actions.h"
 #include "audio_engine/engine/mt_sample_player.h"
+#include "../../../AudIO/AudIO/Core/Chain.h"
 
 #if JUCE_WINDOWS
     #include <windows.h>
@@ -1663,6 +1664,9 @@ namespace
         //--------------------------------------------------------------------------
         R.section( "Instrument hardening: notes never hang" );
         {
+            // This section meters the device, so isolate the held synth from
+            // the earlier drum pattern that transport playback also starts.
+            ai.setTrackMute( seq, trk, true );
             const auto ip  = ai.createProgram( mt::MTProgramType::Plugin, "HardenSynth" );
             auto*      ins = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( ip ) );
             const auto ht  = ai.createTrack( seq );
@@ -2033,6 +2037,11 @@ namespace
 #include "AuditRegressionTests.h"
 #include "OptimizationRegressionTests.h"
 #include "DesktopPlatformRegressionTests.h"
+#include "TimingRecordingTests.h"
+#include "ProgramMixerTests.h"
+#include "InstrumentVoiceTests.h"
+#include "AudioWorkflowTests.h"
+#include "ProjectWorkflowTests.h"
 
 class KickEngineTestApp : public juce::JUCEApplication
 {
@@ -2078,6 +2087,41 @@ private:
             return;
         }
 
+        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_PROJECT_WORKFLOW_ONLY", {}).getIntValue() != 0)
+        {
+            testProjectWorkflow(R);
+            R.lines.add("\n" + juce::String(R.passed) + " passed, " + juce::String(R.failed) + " failed");
+            exeDir.getChildFile("engine_test_results.txt").replaceWithText(R.lines.joinIntoString("\n"));
+            setApplicationReturnValue(R.failed); quit(); return;
+        }
+        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_AUDIO_WORKFLOW_ONLY", {}).getIntValue() != 0)
+        {
+            testAudioWorkflow(R);
+            R.lines.add("\n" + juce::String(R.passed) + " passed, " + juce::String(R.failed) + " failed");
+            exeDir.getChildFile("engine_test_results.txt").replaceWithText(R.lines.joinIntoString("\n"));
+            setApplicationReturnValue(R.failed); quit(); return;
+        }
+        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_INSTRUMENT_ONLY", {}).getIntValue() != 0)
+        {
+            testInstrumentVoices(R);
+            R.lines.add("\n" + juce::String(R.passed) + " passed, " + juce::String(R.failed) + " failed");
+            exeDir.getChildFile("engine_test_results.txt").replaceWithText(R.lines.joinIntoString("\n"));
+            setApplicationReturnValue(R.failed); quit(); return;
+        }
+        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_PROGRAM_MIXER_ONLY", {}).getIntValue() != 0)
+        {
+            testProgramMixer(R);
+            R.lines.add("\n" + juce::String(R.passed) + " passed, " + juce::String(R.failed) + " failed");
+            exeDir.getChildFile("engine_test_results.txt").replaceWithText(R.lines.joinIntoString("\n"));
+            setApplicationReturnValue(R.failed); quit(); return;
+        }
+        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_TIMING_ONLY", {}).getIntValue() != 0)
+        {
+            testTimingRecording(R);
+            R.lines.add("\n" + juce::String(R.passed) + " passed, " + juce::String(R.failed) + " failed");
+            exeDir.getChildFile("engine_test_results.txt").replaceWithText(R.lines.joinIntoString("\n"));
+            setApplicationReturnValue(R.failed); quit(); return;
+        }
         const bool optimizationOnly = juce::SystemStats::getEnvironmentVariable("KICK_TEST_OPTIMIZE_ONLY", {}).getIntValue() != 0;
         if(!optimizationOnly && juce::SystemStats::getEnvironmentVariable("KICK_TEST_AUDIT_ONLY", {}).getIntValue() == 0)
         {
@@ -2098,6 +2142,11 @@ private:
         if(!optimizationOnly) testAuditRegressions(R);
         testOptimizationWave(R);
         testDesktopPlatform(R);
+        if(!optimizationOnly) testTimingRecording(R);
+        if(!optimizationOnly) testProgramMixer(R);
+        if(!optimizationOnly) testInstrumentVoices(R);
+        if(!optimizationOnly) testAudioWorkflow(R);
+        if(!optimizationOnly) testProjectWorkflow(R);
 
         R.lines.add( "\n" + juce::String( R.passed ) + " passed, " + juce::String( R.failed ) + " failed" );
         exeDir.getChildFile( "engine_test_results.txt" ).replaceWithText( R.lines.joinIntoString( "\n" ) );

@@ -173,6 +173,9 @@ namespace sim
         });
         selfTestSteps.push_back([this, check] {
             const bool restart = juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "midi-learn-preference";
+            // Startup enumeration correctly marks the synthetic port absent.
+            // Reconnect it before injecting events, as a real controller would.
+            midiLearn->devicesChanged({"test-controller"});
             std::vector<CPktMgr::HWMsg_t> packets;
             sigslot::scoped_connection capture = Controls::InputEvents::dispatchHardwareEvent.connect([&](CPktMgr::HWMsg_t& m) { packets.push_back(m); });
             auto input = [](juce::MidiMessage message) {

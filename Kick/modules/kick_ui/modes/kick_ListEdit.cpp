@@ -151,11 +151,7 @@ namespace kick_ui
         };
 
         tcButton.onClick = [&]() {
-            ListEditTimingCorrect* pTc = new ListEditTimingCorrect();
-            mt::utils::showOptions( "TIMING CORRECT", pTc, [pTc, this]( int R ) {
-                delete pTc;
-            },
-                                    { 0, 0, 650, 520 } );
+            ListEditTimingCorrect::show();
         };
         gridData.gridPlayHeadChanged.connect( [&]() {
             updateViewPosition();
@@ -538,6 +534,12 @@ namespace kick_ui
     ListEditTimingCorrect::ListEditTimingCorrect()
     {
         mt::utils::addAndMakeVisible( this, globalTC, timeDivisionLabel, timeDivList, triplet, type, events, swing, shiftTiming, window, strength );
+        addAndMakeVisible(fromBar); addAndMakeVisible(toBar);
+        const int bars = juce::jmax(1, mt::getAudioInterface().getSequenceLength(target.sequence));
+        fromBar.setRange(1, bars, 1); toBar.setRange(1, bars, 1);
+        toBar.setValue(bars, juce::dontSendNotification);
+        events.onSelectionChanged = [this](int index, const juce::String&) { fromBar.setVisible(index == 2); toBar.setVisible(index == 2); };
+        fromBar.setVisible(false); toBar.setVisible(false);
 
         mt::utils::setTitleFontHeight( 16, globalTC, type, events, swing, shiftTiming, window, strength );
         mt::utils::setValueFontHeight( 16, globalTC, type, events, swing, shiftTiming, window, strength, timeDivList );
@@ -567,38 +569,82 @@ namespace kick_ui
         window.setValue( 100, juce::dontSendNotification );
         strength.setValue( 100, juce::dontSendNotification );
 
-        globalTC.onSelectionChanged = [&]( int Index, const juce::String& Selected ) {};
-
-        timeDivList.onSelectionChanged = [&]( int Index, const juce::String& Selected ) {};
-
         triplet.onClick = [&]() {
-            timeDivList.setListOptions( triplet.getToggleState() ? CommonUtils::getTripletTimeDivisions() : CommonUtils::getDefaultTimeDivisions(), timeDivList.getSelectedIndex() );
+            timeDivList.setListOptions( triplet.getToggleState() ? std::vector<juce::String>{"BAR", "1/2T", "1/4T", "1/8T", "1/16T", "1/32T", "1/64T"} : std::vector<juce::String>{"BAR", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64"}, timeDivList.getSelectedIndex() );
         };
+        const auto options = mt::getAudioInterface().getTimingCorrect();
+        globalTC.setSelected(options.enabled ? 1 : 0, juce::dontSendNotification);
+        const bool isTriplet = (int)options.division % 3 == 0;
+        triplet.setToggleState(isTriplet, juce::dontSendNotification);
+        timeDivList.setListOptions(isTriplet ? std::vector<juce::String>{"BAR", "1/2T", "1/4T", "1/8T", "1/16T", "1/32T", "1/64T"} : std::vector<juce::String>{"BAR", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64"});
+        const std::vector<int> straight{1, 2, 4, 8, 16, 32, 64}, triplets{1, 3, 6, 12, 24, 48, 96};
+        const auto& divisions = isTriplet ? triplets : straight;
+        for(int i = 0; i < (int)divisions.size(); ++i)
+            if(divisions[(size_t)i] == (int)options.division) timeDivList.setSelected(i, juce::dontSendNotification);
+        swing.setValue(options.swing, juce::dontSendNotification);
+        shiftTiming.setValue(options.shift, juce::dontSendNotification);
+        window.setValue(options.window, juce::dontSendNotification);
+        strength.setValue(options.strength, juce::dontSendNotification);
+    }
 
-        type.onSelectionChanged = [&]( int Index, const juce::String& Selected ) {};
+    mt::TimingCorrect ListEditTimingCorrect::getOptions()
+    {
+        mt::TimingCorrect options;
+        const int division[] = {1, 2, 4, 8, 16, 32, 64};
+        const int index = juce::jlimit(0, 6, timeDivList.getSelectedIndex());
+        options.division = (mt::MTTimeBase)(index == 0 ? 1 : division[index] * (triplet.getToggleState() ? 3 : 2) / 2);
+        if(auto* tempo = mt::getAudioInterface().getTempoMgr(target.sequence)) options.barTicks = tempo->getTicksPerBar();
+        options.enabled = globalTC.getSelected() == 1;
+        options.type = (mt::TimingCorrect::Type)type.getSelectedIndex();
+        options.selectedOnly = events.getSelectedIndex() == 1;
+        if(events.getSelectedIndex() == 2)
+            if(auto* tempo = mt::getAudioInterface().getTempoMgr(target.sequence))
+            {
+                const int first = juce::jmin(fromBar.getValue(), toBar.getValue());
+                const int last = juce::jmax(fromBar.getValue(), toBar.getValue());
+                options.rangeStart = tempo->getTicksUpto(first - 1);
+                options.rangeEnd = tempo->getTicksUpto(last);
+            }
+        options.swing = (int)swing.getValue(); options.shift = (int)shiftTiming.getValue();
+        options.window = (int)window.getValue(); options.strength = (int)strength.getValue();
+        return options;
+    }
 
-        events.onSelectionChanged = [&]( int Index, const juce::String& Selected ) {};
-
-        swing.onValueChanged = [&]( int Value ) {};
-
-        shiftTiming.onValueChanged = [&]( int Value ) {};
-
-        window.onValueChanged = [&]( int Value ) {};
-
-        strength.onValueChanged = [&]( int Value ) {};
+    void ListEditTimingCorrect::show()
+    {
+        auto* dialog = new ListEditTimingCorrect();
+        auto& ae = mt::getAudioInterface();
+        const auto selected = ae.getSelected();
+        const auto project = ae.getValueTree();
+        const auto trackState = ae.getTrackState(selected.sequence, selected.track);
+        mt::utils::showOptions("TIMING CORRECT", dialog, [dialog, selected, project, trackState](int result) {
+            auto& audio = mt::getAudioInterface();
+            if(result == UI::APPLY && audio.getValueTree() == project && audio.getTrackState(selected.sequence, selected.track) == trackState)
+            {
+                const auto options = dialog->getOptions();
+                const int changed = audio.applyTimingCorrect(selected, options);
+                // The dialog's recording settings belong to the same sequence
+                // captured on open; don't apply them to a newly selected sequence.
+                if(audio.getSelectedSequence() == selected.sequence) audio.setTimingCorrect(options);
+                mt::utils::showNotification(changed < 0 ? "Track is no longer available" : juce::String(changed) + " notes updated");
+            }
+            delete dialog;
+        }, {0, 0, 650, 520});
     }
 
     void ListEditTimingCorrect::resized()
     {
         globalTC.setBoundsRelative( .1246f, .0985f, .3076f, .1674f );
-        type.setBoundsRelative( .0892f, .3177f, .3876f, .1674f );
+        type.setBoundsRelative( .0892f, .3977f, .3876f, .1074f );
         swing.setBoundsRelative( .0892f, .5344f, .3876f, .1822f );
         window.setBoundsRelative( .0892f, .7487f, .3876f, .1822f );
 
         timeDivisionLabel.setBoundsRelative( .523f, .0985f, .3876f, .0394f );
         timeDivList.setBoundsRelative( .523f, .1576f, .2553f, .1083f );
         triplet.setBoundsRelative( .7876f, .1576f, .123f, .1083f );
-        events.setBoundsRelative( .523f, .3177f, .3876f, .1822f );
+        events.setBoundsRelative( .523f, .3977f, .3876f, .1074f );
+        fromBar.setBoundsRelative(.0892f, .277f, .3876f, .105f);
+        toBar.setBoundsRelative(.523f, .277f, .3876f, .105f);
         shiftTiming.setBoundsRelative( .523f, .5344f, .3876f, .1822f );
         strength.setBoundsRelative( .523f, .7487f, .3876f, .1822f );
     }

@@ -37,7 +37,6 @@ namespace kick_ui
         setRowTitles( { "Startup Settings", "Auto Save", "Time Defaults", "Project Defaults", "Default Project Name" } );
 
         asEnabled.setToggleState( settings.projects.isAutoSave(), juce::dontSendNotification );
-        settings.setAutoSave( asEnabled.getToggleState() );
         asTimeout.setSelected( settings.projects.saveAfter(), juce::sendNotification );
 
         addComponent( ssLaunch, 0, 0 );
@@ -62,6 +61,7 @@ namespace kick_ui
 
         ssLaunch.onSelectionChanged = [this]( int index, const juce::String& str ) {
             settings.projects.onLaunch = ( str );
+            settings.projects.isAutoLoad = (str == "Last Used");
         };
         ssRecProjects.onValueChanged = [this]( int value ) {
             settings.projects.maxRecentProjects = ( value );
@@ -72,15 +72,10 @@ namespace kick_ui
         };
 
         asEnabled.onClick = [this]() {
-            settings.setAutoSave( asEnabled.getToggleState() );
             settings.projects.isAutoSave = ( asEnabled.getToggleState() );
         };
         asTimeout.onSelectionChanged = [this]( int index, const juce::String& str ) {
             settings.projects.saveAfter = ( str );
-            if( index == 0 || index == 1 )
-                settings.setAutoSaveTime( str.getIntValue() * 1000 ); //convert sec to ms
-            else
-                settings.setAutoSaveTime( str.getIntValue() * 1000 * 60 ); //convert min to ms
         };
 
         pdTempo.onValueChanged = [this]( int value ) {

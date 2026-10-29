@@ -108,6 +108,7 @@ namespace AudIO
         removeAllEffects();
         setMute( false );
         setSolo( false );
+        setLimiter(false);
         setOutputGain( 1.f );
         setOutputPan( 0.f );
 
@@ -136,20 +137,24 @@ namespace AudIO
     }
     void DawBus::setBypass( bool NewState ) { design_.setParameter( id_, BusOrChain::kParamBypass, NewState ? 1.f : 0.f ); }
 
-    void DawBus::setSolo( bool NewState ) const
+    void DawBus::setSolo( bool NewState )
     {
         auto        busType     = getType();
         const auto& busGroupIDs = DawRouting::getBusIDs( busType );
 
-        if( ( BusType::SendReturn == busType ) || ( BusType::Submix == busType ) )
+        if((BusType::SendReturn == busType) || (BusType::Submix == busType) || (BusType::Out == busType))
         {
+            // Solo membership is additive within each bus group. Explicit mute
+            // remains separate, so clearing solo restores prior mute choices.
+            setSoloInternal(NewState);
+            bool anySolo = false;
+            for(auto bus : busGroupIDs)
+                if(auto* p = DawBusManager::getBus(bus)) anySolo |= p->isSolo();
             for( auto& bus : busGroupIDs )
             {
                 if( auto p = DawBusManager::getBus( bus ) )
                 {
-                    auto soloStatus = NewState ? id_ == bus : false;
-                    p->setSoloInternal( soloStatus );
-                    auto muteStatus = NewState ? id_ != bus : false;
+                    auto muteStatus = anySolo && !p->isSolo();
                     p->setMutedDueToSolo( muteStatus );
                 }
             }
@@ -166,7 +171,7 @@ namespace AudIO
 
     void DawBus::setEffectiveMute()
     {
-        auto mute = _isMuted || _isSoloMuted;
+        auto mute = isEffectivelyMuted();
         design_.setParameter( id_, BusOrChain::kParamMute, mute ? 1.f : 0.f );
     }
 
@@ -180,6 +185,7 @@ namespace AudIO
 
     float DawBus::getOutputPan() const { return design_.getParameter( id_, BusOrChain::kParamPan ); }
     void  DawBus::setOutputPan( float Pan ) { design_.setParameter( id_, BusOrChain::kParamPan, Pan ); }
+    void DawBus::setLimiter(bool enabled) { design_.setParameter(id_, BusOrChain::kParamLimiter, enabled ? 1.f : 0.f); }
 
     // Bus Status...
     BusStatus DawBus::getStatus() const
