@@ -42,6 +42,7 @@ namespace mt
         juce::MidiInput*  source{nullptr};
         double receivedAtMilliseconds{0.0};
         juce::String sourceName; // stable after the input device is unplugged
+        juce::String sourceIdentifier; // distinguish controllers with the same display name
         juce::MidiMessage message;
         using Ptr = juce::ReferenceCountedObjectPtr<MTMidiMessage>;
     };

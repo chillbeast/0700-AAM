@@ -138,8 +138,8 @@ namespace sim
         }
     }
 
-    void SimButton::mouseDown( const juce::MouseEvent& e ) { press( true, e.mods.isShiftDown() ); }
-    void SimButton::mouseUp( const juce::MouseEvent& ) { press( false ); }
+    void SimButton::mouseDown( const juce::MouseEvent& e ) { if(!interceptMapping(e)) press( true, e.mods.isShiftDown() ); }
+    void SimButton::mouseUp( const juce::MouseEvent& ) { if(!mappingGesture) press( false ); mappingGesture = false; }
 
     void SimButton::press( bool isDown, bool shiftModifier )
     {
@@ -175,18 +175,30 @@ namespace sim
     // ShiftLatch
     //==============================================================================
     static bool                  shiftLatched = false;
+    static bool                  shiftHeld = false;
     std::function<void( bool )> ShiftLatch::onChange;
 
-    bool ShiftLatch::isLatched() { return shiftLatched; }
+    bool ShiftLatch::isLatched() { return shiftLatched || shiftHeld; }
 
     void ShiftLatch::setLatched( bool latched )
     {
-        if( shiftLatched == latched )
-            return;
+        const bool before = isLatched();
         shiftLatched = latched;
-        hw::send( hw::buttonMessage( DCC::EN_SHIFT, latched ? DCC::BTN_PRESSED : DCC::BTN_RELEASED ) );
+        const bool active = isLatched();
+        if(before == active) return;
+        hw::send( hw::buttonMessage( DCC::EN_SHIFT, active ? DCC::BTN_PRESSED : DCC::BTN_RELEASED ) );
         if( onChange )
-            onChange( latched );
+            onChange( active );
+    }
+
+    void ShiftLatch::setHeld(bool held)
+    {
+        const bool before = isLatched();
+        shiftHeld = held;
+        const bool active = isLatched();
+        if(before == active) return;
+        hw::send(hw::buttonMessage(DCC::EN_SHIFT, active ? DCC::BTN_PRESSED : DCC::BTN_RELEASED));
+        if(onChange) onChange(active);
     }
 
     //==============================================================================
@@ -329,6 +341,7 @@ namespace sim
 
     void SimKnob::mouseDown( const juce::MouseEvent& e )
     {
+        if(interceptMapping(e)) return;
         if( inCentre( e.position ) )
         {
             pushCentre( true );
@@ -341,6 +354,7 @@ namespace sim
 
     void SimKnob::mouseDrag( const juce::MouseEvent& e )
     {
+        if(mappingGesture) return;
         if( centrePressed )
             return;
 
@@ -364,11 +378,13 @@ namespace sim
 
     void SimKnob::mouseUp( const juce::MouseEvent& )
     {
-        pushCentre( false );
+        if(!mappingGesture) pushCentre( false );
+        mappingGesture = false;
     }
 
-    void SimKnob::mouseWheelMove( const juce::MouseEvent&, const juce::MouseWheelDetails& w )
+    void SimKnob::mouseWheelMove( const juce::MouseEvent& e, const juce::MouseWheelDetails& w )
     {
+        if(onMidiMappingGesture && onMidiMappingGesture(e)) return;
         wheelAccum += ( w.isReversed ? -w.deltaY : w.deltaY ) / 0.11; // ~0.11 per notch on Windows
         int notches = (int)wheelAccum;
         if( notches != 0 )
@@ -441,15 +457,17 @@ namespace sim
 
     void SimPad::mouseDown( const juce::MouseEvent& e )
     {
+        if(interceptMapping(e)) return;
         // Velocity from click height: top = 127, bottom = 20.
         auto y = juce::jlimit( 0.0f, 1.0f, e.position.y / (float)juce::jmax( 1, getHeight() ) );
         hit( true, juce::jlimit( 1, 127, (int)std::round( 127.0f - y * 107.0f ) ) );
     }
 
-    void SimPad::mouseUp( const juce::MouseEvent& ) { hit( false ); }
+    void SimPad::mouseUp( const juce::MouseEvent& ) { if(!mappingGesture) hit( false ); mappingGesture = false; }
 
     void SimPad::mouseDrag( const juce::MouseEvent& e )
     {
+        if(mappingGesture) return;
         // Dragging up while held presses harder: a pad's height = full pressure.
         const auto up = (float)-e.getDistanceFromDragStartY() / (float)juce::jmax( 1, getHeight() );
         press( juce::jlimit( 0, 127, (int)std::round( up * 127.0f ) ) );
@@ -676,6 +694,6 @@ namespace sim
         }
     }
 
-    void SimTouchSlider::mouseDown( const juce::MouseEvent& e ) { touch( e ); }
-    void SimTouchSlider::mouseDrag( const juce::MouseEvent& e ) { touch( e ); }
+    void SimTouchSlider::mouseDown( const juce::MouseEvent& e ) { if(!interceptMapping(e)) touch( e ); }
+    void SimTouchSlider::mouseDrag( const juce::MouseEvent& e ) { if(!mappingGesture) touch( e ); }
 }

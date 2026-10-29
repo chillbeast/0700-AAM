@@ -1,6 +1,6 @@
 # KICK Firmware: User Manual (community build)
 
-This manual describes community simulator v0.1.3 and the Behringer KICK firmware sources in this repository. Windows x64 and Linux x86_64 desktop builds are available. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
+This manual describes community simulator v0.1.4 and the Behringer KICK firmware sources in this repository. Windows x64 and Linux x86_64 desktop builds are available. Nothing here is an official manufacturer release. Physical hardware is unavailable for acceptance testing. It covers:
 
 - the desktop app (`Kick.exe`);
 - the hardware simulator (`KT_KickEM.exe` on Windows, `KT_KickEM` on Linux);
@@ -72,6 +72,28 @@ There are two ways to run the firmware on a PC.
 - **Knobs:** drag a Q-link, or use the mouse wheel over it.
 - **Jog / Enter:** drag around the jog wheel or scroll to turn it; click its centre for Enter. The four surrounding corners are BACK, COPY, minus and plus.
 - **MASTER / REC:** these represent analog gain controls on the hardware and remain visual references in the simulator.
+
+### Mapping a MIDI controller
+
+Community simulator v0.1.4 includes MIDI learn on Windows and Linux. It maps external controllers to the simulator's panel in either layout.
+
+![MIDI learn with highlighted panel targets and Pad 1 selected](../../../docs/images/simulator-midi-learn.png)
+
+1. Connect your MIDI controller. Inputs open automatically; the toolbar's **MIDI** menu lists connected inputs.
+2. Right-click a pad, button, Q-link, jog wheel or touch strip and choose **Learn MIDI**. Press a controller pad/button or move its knob/fader. The status line confirms the assignment. This first gesture learns the mapping without playing the pad or activating the button.
+3. To map several controls, turn on **MIDI LEARN** in the toolbar. Mappable controls have cyan outlines; click one to select it in orange, then move the controller. Repeat for other controls. Turn the mode off, or press **Esc**, to play normally.
+
+Pads and buttons accept MIDI notes or CCs. Pad note velocity and polyphonic/channel pressure are preserved. For a button that sends only press messages, choose **Learn MIDI trigger button (press only)**; it generates a complete press/release for each nonzero value. The default mode expects a momentary press/release pair. Use that default for SHIFT or ERASE. MIDI SHIFT remains held across successive button presses until the controller releases it; the mouse SHIFT latch remains independently one-shot.
+
+Q-links and jog rotation require CCs. Ordinary knobs use **Learn MIDI**: absolute CC movement becomes signed encoder steps, with the first value after restart establishing a baseline to avoid a jump. Endless encoders can use **Learn relative encoder** with two's complement (1/127), offset (65/63), or sign magnitude (1/65), matching the controller's configuration. Movement is limited to 16 firmware detents per incoming message. The touch strip uses absolute CC 0–127 across its full range. The jog's **Enter** push and a button's alternate SHIFT command are separate choices in its right-click menu.
+
+Mappings identify the input device, channel and note/CC number. Each input controls one target; learning it elsewhere replaces its old assignment. Each target keeps one assignment. The **MIDI** menu lists mapped controls, supports removing/clearing assignments, bypasses mappings, and releases held controls. Right-click also shows a control's current assignment. Controller port identifiers can change when moving USB ports; relearn an affected assignment if necessary.
+
+Cancelling an unfinished assignment preserves the previous bypass state. MIDI switch controls CC64–69 use values 0–63 for off and 64–127 for on; a release cannot become a learned button press. Channel-mode commands CC120–127 remain routed to the engine and cannot be learned, including when reading saved mappings. Reset All Controllers releases mapped CC switches while leaving held note controls intact. These ranges follow the [MIDI Association control-change reference](https://midi.org/midi-1-0-control-change-messages).
+
+Mappings save automatically to `simulator-midi.json` in the preferences folder (`prefs` beside the executable, or `KICK_PREFS_DIR`). They survive restart and layout changes and apply across projects. They are personal preferences and are excluded from release packages. Save failures appear in the status line.
+
+Mapped events enter the same firmware packet path as mouse input and are consumed before musical MIDI routing, preventing duplicate notes. Unmapped MIDI continues to tracks. Learn mode consumes notes/CCs while assigning controls; note-offs for keyboard notes already held before learning still reach their tracks. Bypass, unmap, disconnect and MIDI All Notes Off release mapped held controls. The analog MASTER/REC references and controls inside the touchscreen are outside this mapping layer; map Q-links and panel navigation to operate the active screen.
 
 ### PC keyboard shortcuts 🔍
 
@@ -1318,7 +1340,7 @@ Two other screens are reached from elsewhere:
 
 ## 15. Feature status and known gaps
 
-The current source-backed status is maintained in the [functionality inventory](../../../FEATURE-INVENTORY.md), including panel commands, screen registrations, stored state and acceptance checks. It distinguishes implemented code from tested behavior. Version 0.1.3 adds Linux desktop support to v0.1.2's vector hardware panel, saved layout selection, sample/source, DSP and live audition fixes; see the [release notes](../../../RELEASE-NOTES.md). Existing incomplete firmware features remain listed below.
+The current source-backed status is maintained in the [functionality inventory](../../../FEATURE-INVENTORY.md), including panel commands, screen registrations, stored state and acceptance checks. It distinguishes implemented code from tested behavior. Version 0.1.4 adds MIDI controller learn, input and startup repairs, and faster MIDI batch filtering to the Windows/Linux simulator; see the [release notes](../../../RELEASE-NOTES.md). Existing incomplete firmware features remain listed below.
 
 ### Works (tested in this build)
 
@@ -1401,7 +1423,7 @@ The commands below use Windows build folders. For Linux build commands, dependen
 build/win/KickEngineTest.exe
 ```
 
-- **What it covers:** 270 checks in v0.1.3: recorder, looper, filter, envelopes, Basic Synth, Modular presets/modules/routing/effects/play modes, pad layouts and end-to-end engine workflows (pads, velocity, sequencer, save/reload/undo, sampler, looper), plus audit repairs, playback/preview regressions and desktop platform guards. `KICK_TEST_OPTIMIZE_ONLY=1` runs the 27 focused optimization/platform checks. These counts describe regression checks, not completed firmware features.
+- **What it covers:** 270 engine checks in v0.1.4: recorder, looper, filter, envelopes, Basic Synth, Modular presets/modules/routing/effects/play modes, pad layouts and end-to-end engine workflows (pads, velocity, sequencer, save/reload/undo, sampler, looper), plus audit repairs, playback/preview regressions and desktop platform guards. `KICK_TEST_OPTIMIZE_ONLY=1` runs the 27 focused optimization/platform checks. These counts describe regression checks, not completed firmware features. The simulator's 71 controller/startup assertions are a separate suite.
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
 - **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 
@@ -1414,6 +1436,11 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 | `1` | Presses every control type once |
 | `panel` | Loads a bundled scratch template, verifies both layouts, click targets, native screen size, packets, retained state and open-dialog layout switching, and saves full-panel previews. Finishes with Original selected. |
 | `panel-preference` | Repeats the panel checks expecting the saved Original layout at startup; use the same isolated preferences directory as the preceding panel run. |
+| `midi-learn` | Exercises note/CC learning, velocity/pressure, relative encoders, persistence, reassignment, bypass/disconnect releases, popup gestures and both layout packet paths with synthetic MIDI. Use isolated preferences. |
+| `midi-learn-preference` | Checks learned mappings in a second application process; share the preceding MIDI test's preferences. |
+| `midi-audit` | 21 focused controller/queue checks: overlapping note releases, sustain, switch thresholds, cancelled learn, channel-mode commands, disconnects, signed encoders, held Shift and ordered MIDI filtering. `KICKEM_MIDI_BENCH=1` adds a checked synthetic batch benchmark. |
+| `startup` | Sends input and loads a template during window construction, before deferred screens exist; verifies navigation and missing-screen fallback. |
+| `startup-shutdown` | Releases the UI before deferred screen creation, then verifies cancellation and resize safety. |
 | `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads. Then picks Modular and the FM Bell preset and turns Macro 1 |
 | `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads and undoes. Then adds a reverb, cables a new oscillator into the first, and saves a user preset (into the temporary prefs copy). Then switches to Legato with glide, moves the reverb, holds a pad with pressure while logging every module's activity, and deletes the preset. Then adds a Formant module, sets the arpeggiator up through ARP, holds a three-pad chord and goes back |
 | `audio` | Lists the audio devices, opens PREFS → Audio |

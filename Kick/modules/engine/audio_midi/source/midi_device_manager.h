@@ -28,6 +28,11 @@ namespace mt
         , private juce::AsyncUpdater
     {
     public:
+#ifdef SIM_BUILD
+        // Message-thread interception before musical routing; true consumes the event.
+        static std::function<bool(const MTMidiMessage&)> simulatorInputFilter;
+        static void filterSimulatorMidiMessages(juce::Array<MTMidiMessage>& messages);
+#endif
         std::function<void( const MTMidiMessage& )>        onMidiMessage  = []( const MTMidiMessage& ) {};
         std::function<void( juce::Array<MTMidiMessage>& )> onMidiMessages = []( juce::Array<MTMidiMessage>& ) {};
 

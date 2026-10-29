@@ -49,7 +49,20 @@ namespace sim
     ///
     /// Momentary hardware button with LED. Optional SHIFT function (alternate code).
     ///
-    class SimButton : public juce::Component, public juce::SettableTooltipClient
+    class MidiMappable : public juce::Component, public juce::SettableTooltipClient
+    {
+    public:
+        std::function<bool(const juce::MouseEvent&)> onMidiMappingGesture;
+    protected:
+        bool mappingGesture = false;
+        bool interceptMapping(const juce::MouseEvent& e)
+        {
+            mappingGesture = onMidiMappingGesture ? onMidiMappingGesture(e) : e.mods.isPopupMenu();
+            return mappingGesture;
+        }
+    };
+
+    class SimButton : public MidiMappable
     {
     public:
         SimButton( juce::String label, int code, juce::String shiftLabel = {}, int shiftCode = DCC::EN_INVALID_ID );
@@ -88,13 +101,14 @@ namespace sim
     {
         static bool isLatched();
         static void setLatched( bool latched ); // sends EN_SHIFT pressed / released
+        static void setHeld(bool held); // MIDI momentary modifier, independent of the mouse latch
         static std::function<void( bool )> onChange;
     };
 
     ///
     /// Rotary control. Endless encoders emit step counts; absolute pots report 0..1.
     ///
-    class SimKnob : public juce::Component, public juce::SettableTooltipClient
+    class SimKnob : public MidiMappable
     {
     public:
         enum class Mode
@@ -142,7 +156,7 @@ namespace sim
     ///
     /// One drum pad. Colour/state are driven by the pad packets the app sends to the hardware.
     ///
-    class SimPad : public juce::Component, public juce::SettableTooltipClient
+    class SimPad : public MidiMappable
     {
     public:
         explicit SimPad( int index );
@@ -197,7 +211,7 @@ namespace sim
     ///
     /// Touch strip. Emits slider packets; shows the LED level the app sends back.
     ///
-    class SimTouchSlider : public juce::Component, public juce::SettableTooltipClient
+    class SimTouchSlider : public MidiMappable
     {
     public:
         SimTouchSlider();

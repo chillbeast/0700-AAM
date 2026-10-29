@@ -155,7 +155,7 @@ Both static-workload output checksums are unchanged; automation tests also compa
 
 ## Inventory follow-up: preview ownership (2026-10-28)
 
-[FEATURE-INVENTORY.md](FEATURE-INVENTORY.md) records 165 capability groups, their implementation/state evidence and remaining acceptance checks. Its indexes cover all 54 button-command IDs, all 34 screen IDs, 29 registered screens and 1,079 UI callback/signal/event candidates. This is a functionality ledger, not a claim that all features are accepted.
+The v0.1.2 [functionality inventory](FEATURE-INVENTORY.md) recorded 165 capability groups, including seven community extensions, their implementation/state evidence and remaining acceptance checks. Its indexes cover all 54 button-command IDs, all 34 screen IDs, 29 registered screens and 1,079 UI callback/signal/event candidates. This is a functionality ledger, not a claim that all features are accepted.
 
 The inventory exposed an integration regression in the local O5 changes: ASoundPlayer embeds its ASound as a member, while its base renderer now retains an owning source snapshot. Loading a synthetic WAV and destroying that wrapper caused an ASan invalid free. The renderer must release that snapshot before the embedded source's lifetime ends. The same detachment is needed for purge/reload. The wrapper now detaches before these operations and rebinds on its next load; a permanent load/purge/reload/destruction regression was added. v0.1.1 predates O5 and is unaffected by this regression.
 
@@ -184,3 +184,53 @@ Six platform regressions cover portable runtime/project paths, isolated preferen
 Linux full engine validation now passes 270/270 with exit 0 using a private PulseAudio null sink. All nine Release UI cases pass on Linux and Windows, including three panel runs with 227 assertions each and the shared UI audit with five. Linux GUI checks run under Xvfb from `/` with isolated preferences; panel screenshots were inspected. These checks do not establish physical interface acceptance or complete the inventory's remaining gaps. Windows suite results and distribution validation are recorded in [RELEASE-NOTES.md](RELEASE-NOTES.md); local evidence is in `../devtools/linux-v0.1.3/`.
 
 The cross-platform package tool preserves tracked assets, documentation, licenses and exact source/executable hashes. Linux archives include an executable launcher, ELF/dependency checks and the Ubuntu baseline. Previous public release tags and archives remain intact. The README disclaimer is retained, and the manual, Linux build guide and inventory distinguish desktop portability from embedded hardware functionality.
+
+## Simulator MIDI learn (current source after v0.1.3)
+
+The simulator adds right-click learning and a toolbar mode for notes/CCs controlling pads, buttons/alternate commands, Q-links, jog/Enter and touch strip. Assignments persist globally in `simulator-midi.json` under isolated preferences and identify the input port, channel and note/CC. The MIDI menu exposes assignments, bypass, clear and held-control release. Absolute CCs, three relative encoder formats, press-only trigger buttons and pad velocity/pressure are supported. Analog references and touchscreen parameter widgets are outside this panel mapping layer.
+
+The existing MIDI-thread queue copies a stable device identifier as well as its display name. Simulator-only interception runs on the message thread before musical routing; mapped events are consumed and unrelated MIDI remains routed normally. Learned note releases are tracked across cancel, bypass, unmap and reassignment. Held controls release on disconnect/All Notes Off; events queued before a disconnect cannot reactivate them afterward. Keyboard note-offs begun before learning and channel pressure for concurrently played keyboard notes retain their musical route. Asynchronous menus use a weak lifetime token, and the simulator removes its filter before tearing down controls.
+
+Validation: **35 MIDI checks plus seven application-restart checks**, each passing in Windows Release, Windows AddressSanitizer and native Linux Release with exit 0; no sanitizer report. Both platforms also pass all nine existing UI cases (227 assertions per panel run; five shared audit checks). Tests exercise input identity/channel isolation, learning without accidental actions, velocity/pressure, relative formats, persistence, source reassignment, trigger buttons, bypass/disconnect/late-event releases, malformed entries, right-click handling, Escape and both layout packet paths. Evidence is in `../devtools/midi-learn-review/`. These are synthetic MIDI tests; real controller/driver acceptance remains separate. Existing firmware capability counts are unchanged, and the extension is recorded as EX-08 in both inventory forms. The desktop shortcut still resolves to the locally rebuilt no-ASIO `Kick/build/dist/KT_KickEM.exe`.
+
+## Controller and startup review wave 3
+
+This review follows the first MIDI learn implementation. The original controller probes produced **10 failing assertions across seven defects** against the unchanged mapper/control behavior. A later deterministic startup probe reproduced an access violation (`0xc0000005`) by loading a project and sending input during window construction, before queued screens existed. The original source snapshots and failing logs are preserved outside the repository in `../devtools/optimization-wave3-review/baseline/`, `baseline.log` and `startup-baseline.log`.
+
+| ID | Reproduction and repair |
+|---|---|
+| M1 | A note already routed musically is retriggered after learning its source. Its release previously returned to the musical route before releasing the mapped control. Release both destinations, including when unmapping between press and release. |
+| M2 | A sustain/switch press passes through while mappings are bypassed, then its release is swallowed after enabling/learning. Track previously forwarded switch presses and preserve their releases. CC64–69 use the specified 0–63 off / 64–127 on boundary, so a nonzero off value cannot teach a button or leave one held. |
+| M3 | Arming then cancelling learn enabled mappings in memory while the saved file retained bypass. Enable only when an assignment succeeds; cancellation keeps runtime and saved bypass consistent. |
+| M4 | Reset/other channel-mode commands could be learned or restored as ordinary CC bindings. Keep CC120–127 in musical routing and reject such saved assignments. Reset All Controllers releases mapped CC switches without releasing held note controls. |
+| M5 | Two's-complement encoder value 64 was decoded as neutral. Decode the signed seven-bit minimum as negative movement, retaining the existing 16-detent cap. |
+| M6 | Unmapping a controller before unplugging removed the only identifier checked for stale input. Remember observed/connected devices independently of bindings and reject late presses. In-flight releases already owed to the musical route remain forwarded, including sustain, instead of getting swallowed by the disconnect guard. |
+| M7 | The mapped SHIFT used the mouse's one-shot latch and cleared on the first button release. Maintain an independent momentary MIDI modifier; releasing it preserves any mouse latch, and the mouse latch remains one-shot. |
+| M9 | Queued startup left `currentScreen` invalid and hardware routing dereferenced missing views; lookups could also insert null screen entries. Select the existing Recent Projects view synchronously, queue deferred creation directly on the UI thread, defer missing destinations until ready, use non-mutating lookups and guard unavailable views. Weak callbacks and a released-state flag prevent queued loads/creation after shutdown; resize is safe after release. |
+
+M2/M4's switch ranges and channel-mode boundary follow the [MIDI Association control-change reference](https://midi.org/midi-1-0-control-change-messages). Physical controller/driver acceptance remains separate from these synthetic input tests.
+
+**M8 optimization:** filtering previously erased each consumed MIDI event from the array, shifting the remaining tail repeatedly. Compact survivors in one pass and trim once, retaining message payloads, source identities, timestamps and order. The checked benchmark compares the old erasing loop and the new filter in the same executable: 4,096 events, half consumed, one warmup and five timed runs per implementation, reporting medians. A survivor count and timestamp checksum validate each measured result. This measures array filtering, excluding controller actions, audio rendering and UI work.
+
+Learn highlights now keep one entry per physical component, avoiding duplicate outlines for alternate button commands/jog Enter and repeated selected-target lookups. Deferred view creation also avoids a worker-pool hop for work that always executes on the message thread.
+
+The follow-up regression suite contains **21 controller/queue checks**, **five early-startup checks** and **three early-shutdown checks**. Together with the original 35 MIDI and seven restart checks, this is **71 focused assertions** across five processes. Startup checks wait for queued callbacks rather than assuming a fixed frame delay. These checks are separate from the historical 270-check engine baseline and do not complete the remaining firmware inventory.
+
+Final validation (2026-10-28):
+
+| Check | Result |
+|---|---|
+| Windows Debug focused suite | 71 passed, all processes exit 0 |
+| Windows no-ASIO Release focused suite | 71 passed, all processes exit 0 |
+| Windows AddressSanitizer focused suite | 71 passed, all processes exit 0; no report |
+| Native Linux Release focused suite | 71 passed, all processes exit 0 |
+| Full UI regression on Windows and Linux | Nine cases pass on each platform; three panel runs at 227 assertions each and shared audit at five |
+| Windows distribution preflight | ASIO/ASan disabled; 899 tracked runtime files match source |
+
+The full UI runs preceded the final M6 release-only guard refinement; the final 71-check suite was rerun on all four configurations afterward. Linux GUI/audio validation uses Xvfb and a private PulseAudio null sink. The Windows desktop shortcut still targets the rebuilt `Kick/build/dist/KT_KickEM.exe`.
+
+| Checked Windows Release filtering workload | Legacy erasing loop | One-pass compaction |
+|---|---|---|
+| 4,096 events, half consumed; median of five runs | 10.690 ms | 0.096 ms |
+
+Both implementations retain the same 2,048 events and checked timestamp sum. The measurement excludes MIDI target actions, rendering and audio callbacks; it is not a claim of an equivalent whole-application speedup. Final logs/builds are under `../devtools/optimization-wave3-review/`, including `final-release-tests`, `release-ownership-debug-tests`, `release-ownership-asan-tests` and `linux-final-*.log`.

@@ -32,6 +32,24 @@ namespace mt
     std::vector<juce::String>                        MTMidiDeviceManager::midiOutPorts{ "None" };
     juce::ReferenceCountedArray<MidiDeviceListEntry> MTMidiDeviceManager::midiInputs;
     juce::ReferenceCountedArray<MidiDeviceListEntry> MTMidiDeviceManager::midiOutputs;
+#ifdef SIM_BUILD
+    std::function<bool(const MTMidiMessage&)> MTMidiDeviceManager::simulatorInputFilter;
+    void MTMidiDeviceManager::filterSimulatorMidiMessages(juce::Array<MTMidiMessage>& messages)
+    {
+        if(!simulatorInputFilter) return;
+        // Compact survivors once. Erasing each consumed event shifts the tail
+        // repeatedly and becomes quadratic for a burst of controller input.
+        const int count = messages.size();
+        int retained = 0;
+        for(int read = 0; read < count; ++read)
+            if(!simulatorInputFilter(messages.getReference(read)))
+            {
+                if(retained != read) messages.getReference(retained) = messages.getReference(read);
+                ++retained;
+            }
+        messages.removeRange(retained, count - retained);
+    }
+#endif
 
     ///
     /// Implementation
@@ -292,6 +310,7 @@ namespace mt
         MTMidiMessage          msg;
         msg.source  = source;
         msg.sourceName = source ? source->getName() : juce::String();
+        msg.sourceIdentifier = source ? source->getIdentifier() : juce::String();
         msg.message = message;
         msg.receivedAtMilliseconds = juce::Time::getMillisecondCounterHiRes();
         incomingMessages.add( msg );
@@ -306,6 +325,9 @@ namespace mt
             midiMessages.swapWith( incomingMessages );
         }
 
+#ifdef SIM_BUILD
+        filterSimulatorMidiMessages(midiMessages);
+#endif
         onMidiMessages( midiMessages );
         for( auto& m : midiMessages )
         {

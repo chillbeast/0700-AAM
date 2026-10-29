@@ -146,18 +146,20 @@ namespace kick_ui
         // Connect sceeen signals.
         // Open screen as passed in Argument.
         signals::sigScreenOpen.connect( [&]( Screen Scrn ) {
+            if(screensReleased) return;
             if( !( ( currentScreen == Screen::HomeOptions ) || ( currentScreen == Screen::HomeListView ) || ( currentScreen == Screen::Invalid ) ) )
             {
                 stack.push( currentScreen );
             }
 
-            juce::MessageManager::callAsync( [Scrn, this]() {
-                load( Scrn );
+            juce::MessageManager::callAsync( [Scrn, self = juce::Component::SafePointer<KickHome>(this)]() {
+                if(self) self->load( Scrn );
             } );
         } );
 
         // Close existing screen and open screen as passed in argument.
         signals::sigScreenClose.connect( [&]( Screen NewScrn ) {
+            if(screensReleased) return;
             Screen loadScreen = NewScrn;
             if( !stack.empty() )
             {
@@ -167,8 +169,8 @@ namespace kick_ui
                 stack.pop();
             }
 
-            juce::MessageManager::callAsync( [loadScreen, this]() {
-                load( loadScreen );
+            juce::MessageManager::callAsync( [loadScreen, self = juce::Component::SafePointer<KickHome>(this)]() {
+                if(self) self->load( loadScreen );
             } );
         } );
 
@@ -208,11 +210,13 @@ namespace kick_ui
 
         // Load default startup screen.
         //signals::sigScreenOpen( Screen::Temp );
-        signals::sigScreenOpen( Screen::RecentProject );
+        load( Screen::RecentProject ); // a valid input destination before queued work runs
 
         // Now, Lazily create and load rest of the screens
-        mt::threadPool.addJob( [&, screenAdder]() {
-            juce::MessageManager::callAsync( [&, screenAdder]() {
+        // Screen creation always belongs on the message thread. Posting through
+        // the worker pool first allowed navigation to overtake initialization.
+        juce::MessageManager::callAsync( [screenAdder, self = juce::Component::SafePointer<KickHome>(this)]() {
+                if(!self || self->screensReleased) return;
                 // Home Screen
                 screenAdder( Screen::HomeListView, std::make_unique<AppMainmode>() );
                 screenAdder( Screen::HomeGridView, std::make_unique<AppGrid>() );
@@ -243,7 +247,13 @@ namespace kick_ui
                 screenAdder( Screen::CVClib, std::make_unique<CVClib>() );
                 screenAdder( Screen::Inserts, std::make_unique<Inserts>() );
                 //screenAdder( Screen::Temp, std::make_unique<TempScreen>() );
-            } );
+                self->screensReady = true;
+                if(self->pendingScreen != Screen::Invalid)
+                {
+                    const auto pending = self->pendingScreen;
+                    self->pendingScreen = Screen::Invalid;
+                    self->load(pending);
+                }
         } );
     }
 
@@ -256,6 +266,8 @@ namespace kick_ui
 
     void KickHome::releaseScreens()
     {
+        screensReleased = true;
+        currentScreen = pendingScreen = Screen::Invalid;
         cancelPendingUpdate();
         removeAllChildren();
         ctrlBar_.reset();
@@ -264,25 +276,35 @@ namespace kick_ui
 
     IScreen* KickHome::getScreen( Screen screen )
     {
-        return screens_[screen].get();
+        const auto found = screens_.find(screen);
+        return found != screens_.end() ? found->second.get() : nullptr;
     }
 
     void KickHome::load( Screen screen )
     {
+        if(screensReleased) return;
+        if(!getScreen(screen))
+        {
+            if(!screensReady)
+            { pendingScreen = screen == Screen::Invalid ? Screen::HomeListView : screen; return; }
+            screen = Screen::HomeListView;
+            if(!getScreen(screen)) return;
+        }
         ui::clearFocusComponent();
 
         // Emit signal...
         signals::onScreenClosed( currentScreen );
 
         // Bounds check...
-        currentScreen = ( screens_.end() != screens_.find( screen ) ) ? screen : Screen::HomeListView;
+        currentScreen = screen;
         // Load current screen...
         triggerAsyncUpdate();
     }
 
     void KickHome::setupLoadScreenVisibility()
     {
-        if( auto p = screens_[currentScreen].get() )
+        if(screensReleased) return;
+        if( auto p = getScreen(currentScreen) )
         {
             // Turn off all screens.
             for( const auto& it : screens_ )
@@ -292,8 +314,8 @@ namespace kick_ui
                         comp->setVisible( false );
             }
             // Set control and status bar visibility.
-            ctrlBar_->setVisible( p->requiresControlBar() );
-            statusBar_->setVisible( p->requiresStatusBar() );
+            if(ctrlBar_) ctrlBar_->setVisible( p->requiresControlBar() );
+            if(statusBar_) statusBar_->setVisible( p->requiresStatusBar() );
             // Set loading screen visibility.
             if( auto pScr = dynamic_cast<juce::Component*>( p ) )
             {
@@ -334,18 +356,19 @@ namespace kick_ui
         auto bounds = getLocalBounds();
         {
             auto b = bounds;
-            ctrlBar_->setBounds( b.removeFromTop( ui::layout::header.getHeight() ) );
-            statusBar_->setBounds( b.removeFromBottom( ui::layout::statusBar.getHeight() ) );
+            if(ctrlBar_) ctrlBar_->setBounds( b.removeFromTop( ui::layout::header.getHeight() ) );
+            if(statusBar_) statusBar_->setBounds( b.removeFromBottom( ui::layout::statusBar.getHeight() ) );
         }
     }
 
     void KickHome::AssignSampleStartUp()
     {
-        dynamic_cast<AppAssignSample*>( screens_[Screen::MenuAssignSample].get() )->startup();
+        if(auto* assign = dynamic_cast<AppAssignSample*>(getScreen(Screen::MenuAssignSample))) assign->startup();
     }
 
     void KickHome::handleCommand( CPktMgr::HWMsg_t& f_HwMsg )
     {
+        if(screensReleased) return;
         auto&        ae        = mt::getAudioInterface();
         auto         prjLoaded = ae.isProjectLoaded();
         juce::String log;
@@ -448,7 +471,7 @@ namespace kick_ui
                             break;
 
                         case contracts::DeviceControlContracts::EN_LINK:
-                            dynamic_cast<KnobEdit*>( screens_[Screen::MenuKnobEdit].get() )->knobLongPress();
+                            if(auto* knob = dynamic_cast<KnobEdit*>(getScreen(Screen::MenuKnobEdit))) knob->knobLongPress();
                             break;
                         case contracts::DeviceControlContracts::EN_SAVE:
                             ae.saveProject();
@@ -487,7 +510,7 @@ namespace kick_ui
                 juce::Logger::writeToLog( log );
                 auto knob  = contracts::DclContractsHelper::getKnobCode( f_HwMsg );
                 auto value = contracts::DclContractsHelper::getKnobValue( f_HwMsg );
-                getScreen( Screen::MenuKnobEdit )->knobCommand( knob, value );
+                if(auto* screen = getScreen(Screen::MenuKnobEdit)) screen->knobCommand( knob, value );
                 return;
             }
 
@@ -498,11 +521,11 @@ namespace kick_ui
                 ui::getComponentInFocus()->handleCommand( f_HwMsg );
             }
 
-            else if( getScreen( getCurrentScreen() )->requiresHandleCommand() )
+            else if( auto* screen = getScreen(getCurrentScreen()); screen && screen->requiresHandleCommand() )
             {
                 log += " register handle command";
                 juce::Logger::writeToLog( log );
-                getScreen( getCurrentScreen() )->handleCommand( f_HwMsg );
+                screen->handleCommand( f_HwMsg );
             }
 
             // REC lights while pads are being recorded (STOP on any screen ends it).
@@ -518,7 +541,7 @@ namespace kick_ui
         {
             log += " project is loading and center knob message";
             juce::Logger::writeToLog( log );
-            getScreen( getCurrentScreen() )->handleCommand( f_HwMsg );
+            if(auto* screen = getScreen(getCurrentScreen())) screen->handleCommand( f_HwMsg );
         }
     }
 }

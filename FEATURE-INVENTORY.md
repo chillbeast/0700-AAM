@@ -2,7 +2,9 @@
 
 Snapshot: 2026-10-28; community simulator v0.1.2, based on the v0.1.1 audit commit e5f5ea8c plus O1-O6 playback/DSP and live-preview repairs, the vector panel and its saved layout toggle. The v0.1.1 release predates those additions. See RELEASE-NOTES.md for the release scope and checks.
 
-**v0.1.3 platform update:** Linux x86_64 joins Windows x64 with the same panel/UI/engine. Portable runtime paths and explicit desktop device guards are community extensions; they do not change the 165 base-firmware capability classifications below. Desktop builds disable embedded CV/I2C, USB gadget, network configuration, firmware flashing and host power commands. System audio/MIDI remain available; device acceptance rows still require physical hardware. See [release checks](RELEASE-NOTES.md) and [Linux setup](Kick/how-to/release-simulator.md#linux-desktop).
+**v0.1.3 platform update:** Linux x86_64 joins Windows x64 with the same panel/UI/engine. Portable runtime paths and explicit desktop device guards are community extensions; they do not reclassify the base-firmware rows below. Desktop builds disable embedded CV/I2C, USB gadget, network configuration, firmware flashing and host power commands. System audio/MIDI remain available; device acceptance rows still require physical hardware. See [release checks](RELEASE-NOTES.md) and [Linux setup](Kick/how-to/release-simulator.md) for setup.
+
+**Current-source review wave 3:** controller release ownership, pedal thresholds, bypass cancellation, channel-mode protection, encoder decoding, disconnect guards, held Shift and deferred UI startup are repaired. The controller/startup self-tests total 71 checks; they do not change the base capability classifications or establish physical controller acceptance. See [the review record](AUDIT-FIXES.md#controller-and-startup-review-wave-3).
 
 This is an inventory of user-facing capabilities in the checked-out firmware, its manual, panel protocol and registered screens. It records implementation evidence, stored state and the next acceptance check. It is not a certification of every hardware path, effect algorithm or combination of settings.
 
@@ -12,7 +14,7 @@ Verification: R = related portable regression coverage (often engine/data only, 
 
 ## Summary
 
-The reviewed matrix has **165 capability groups**: **104 present**, **27 partial**, **31 missing**, **3 unverified**. These are capability groups, not a completion percentage; the community extensions are listed separately at the end.
+The current matrix has **166 capability groups**: **105 present**, **27 partial**, **31 missing**, **3 unverified**. It includes **158 base-firmware groups** (97 present, 27 partial, 31 missing, 3 unverified) and **eight community extensions**, listed separately at the end. The v0.1.2 baseline had 165 total groups including seven extensions; adding MIDI learn as EX-08 increases the total without reclassifying a base feature. These groups are not a completion percentage.
 
 The structural indexes account for all **54 button-command IDs** (including bank commands and the virtual Color Edit ID), **34 screen IDs**, and **29 KickHome screen registrations**. A heuristic index records **1,079 callback/signal/event-method candidates** in C++ source and headers under kick_ui, program_edit_ui, kick_ui_settings and kick_ui_channel_mixer. Those candidates include internal notifications and optional lifecycle hooks; their count is not a feature count.
 
@@ -297,7 +299,7 @@ Non-button inputs are also inventoried: pad note/velocity/aftertouch and SHIFT/b
 | CT-22 | Linux multi-process startup/reconnect/recovery | Partial | IPC/process state | D: [IPC](Kick/modules/ipc/connection/mt_ipc_socket_server.cpp) | Previously noted raw-owner/map synchronization concerns need Linux shutdown/reconnect stress. |
 | CT-23 | Factory samples / metronome content | Unverified | External licensed assets | U: [Settings](Kick/modules/engine/project/kick_settings.cpp), [Sampler](Kick/modules/kick_ui/audio_components/sampler/kick_Sampler.cpp) | Public source omits factory audio; use legal fixtures and report missing assets rather than treating content as code. |
 
-### Community instrument extensions (separate from base-firmware coverage)
+### Community extensions (separate from base-firmware coverage)
 
 | ID | Capability | Implementation | Stored state | Evidence | Acceptance / remaining work |
 |---|---|---|---|---|---|
@@ -308,6 +310,7 @@ Non-button inputs are also inventoried: pad note/velocity/aftertouch and SHIFT/b
 | EX-05 | Modular mono / legato / glide / arp / tempo sync | Present | Patch tree + runtime notes | R: [Modular](Kick/modules/engine/audio_program/instrument/modular/mt_modular_engine.cpp), [EngineTests](Kick/apps/kick_engine_test/Main.cpp), [AuditTests](Kick/apps/kick_engine_test/AuditRegressionTests.h) | Held-note mode changes and timing tested; verify external clock through UI. |
 | EX-06 | Mono-host Modular effects and release tails | Present | Runtime DSP | R: [Modular](Kick/modules/engine/audio_program/instrument/modular/mt_modular_engine.cpp), [Round2Tests](Kick/apps/kick_engine_test/OptimizationRegressionTests.h) | New round-2 test compares irregular mono blocks with stereo sum. |
 | EX-07 | Exact coefficient caching / source voice isolation | Present | Runtime DSP/source ownership | R: [Modules](Kick/modules/engine/audio_program/instrument/modular/mt_modular_modules.cpp), [Slice](Kick/modules/engine/audio_file_manager/source/audio_sound_renderer.cpp), [Round2Tests](Kick/apps/kick_engine_test/OptimizationRegressionTests.h) | O1-O6 regressions cover exact cache changes, source snapshots, wrapper teardown and concurrent live audition; full Debug and ASan suites pass 264/264. Hardware timing remains unverified. |
+| EX-08 | Simulator MIDI controller learn (v0.1.4) | Present | Global preferences: simulator-midi.json | R: [Mapper](Kick/apps/kickem/simulator/kick_MidiLearn.cpp), [Panel integration/tests](Kick/apps/kickem/simulator/kick_SimulatorMidi.cpp) | Synthetic MIDI checks cover notes/CCs, pressure, relative encoders, input/channel identity, persistence, reassignment, bypass/disconnect and late-event release guards. Real controllers/driver combinations still require acceptance. Panel controls only; analog gain and touchscreen parameter learning are outside this layer. |
 
 ## Reconciliation with the older manual and audit
 

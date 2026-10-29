@@ -1,5 +1,24 @@
 # Community simulator releases
 
+## v0.1.4
+
+Windows x64 and Linux x86_64 community simulator release with MIDI controller learn, input/startup repairs and faster MIDI filtering. Earlier release tags and downloads remain available.
+
+- Follow-up bug/optimization review: preserve overlapping musical/mapped note releases and sustain releases, honor MIDI switch thresholds, retain bypass when cancelling learn, protect channel-mode commands, decode the signed encoder minimum, reject late input after unmapping/disconnect, and keep MIDI Shift held independently of the mouse latch.
+- Fix startup input reaching missing screens; create deferred views directly on the UI queue and cancel navigation/creation after shutdown. Screen lookup no longer inserts null entries.
+- Compact filtered MIDI batches in one pass and draw each learn highlight once. Add 21 controller/queue checks and eight startup/shutdown checks alongside the original MIDI/restart tests.
+- Add right-click **Learn MIDI** menus and a persistent toolbar **MIDI LEARN** mode with highlighted targets and status feedback.
+- Map pads, panel buttons and their alternate commands, Q-links, jog turn/Enter and touch strip. Support note/CC buttons, press-only triggers, velocity/pressure, absolute CCs and three relative encoder formats.
+- Save per-device/channel mappings globally in isolated preferences. Show connected inputs and mapped controls, remove/clear mappings, bypass routing or release held controls.
+- Consume mapped events before track MIDI routing. Preserve unmapped keyboard input and pending note-offs; release held targets on bypass, unmap, disconnect and All Notes Off, and reject late queued input from disconnected controllers.
+- Add synthetic MIDI and application-restart self-tests. Update the manual and capability inventory. Published v0.1.3 archives are unchanged.
+
+Initial MIDI implementation validation, before review wave 3: **35 MIDI checks and seven restart checks pass** in Windows Release, Windows AddressSanitizer and native Linux Release, all with exit 0; no sanitizer report. All nine existing simulator UI cases pass on Windows and Linux, including 227 assertions per panel run and five in the shared UI audit. MIDI input is synthetic; Linux GUI/audio uses Xvfb and a private null sink. The MIDI checks are separate from the engine suite's historical 270-check baseline.
+
+The follow-up review's reproductions, final validation and benchmark are recorded in [AUDIT-FIXES.md](AUDIT-FIXES.md#controller-and-startup-review-wave-3).
+
+Final follow-up checks: **71/71** in Windows Debug, Windows Release, Windows ASan and native Linux Release; all exit 0, with no sanitizer report. Full UI regressions pass on both platforms. Checked 4,096-event filtering medians improve from **10.690 ms to 0.096 ms** on this Windows desktop; this measures filtering alone.
+
 ## v0.1.3
 
 Add the Linux x86_64 desktop simulator, built against Ubuntu 22.04/glibc 2.35, alongside Windows x64. Existing v0.1.2 tags and assets are preserved.

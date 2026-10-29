@@ -71,6 +71,8 @@ namespace kick_ui
 
         Screen currentScreen{ Screen::Invalid };
         Screen prevScreen{ Screen::Invalid };
+        Screen pendingScreen{ Screen::Invalid };
+        bool screensReady{ false }, screensReleased{ false };
     };
 
     static void padPress( const std::vector<int>& Notes, int Velocity, mt::SamplePlayType PlayType );

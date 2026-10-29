@@ -89,6 +89,10 @@ target_sources(${TargetName}
         simulator/kick_SimulatorInterfaceImpl.cpp
         simulator/kick_PanelArtwork.h
         simulator/kick_PanelArtwork.cpp
+        simulator/kick_MidiLearn.h
+        simulator/kick_MidiLearn.cpp
+        simulator/kick_SimulatorMidi.cpp
+        simulator/kick_MidiAuditTests.cpp
 )
 
 target_compile_definitions(${TargetName}

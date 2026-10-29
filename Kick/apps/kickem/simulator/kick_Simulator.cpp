@@ -3,6 +3,7 @@
 #include <program_edit_ui/sources/instrument/kick_ModularEditor.h>
 #include "kick_Simulator.h"
 #include "kick_SimulatorInterfaceImpl.h"
+#include <audio_midi/audio_midi.h>
 
 namespace sim
 {
@@ -69,6 +70,7 @@ namespace sim
         };
 
         outputConnection = SimulatorInterfaceImpl::outputReceived.connect( [this]( const CPktMgr::HWMsg_t& m ) { handleOutput( m ); } );
+        setupMidiLearn(buttons);
 
         setSize( boardWidth, boardHeight ); // last: resized() needs every child
 
@@ -90,6 +92,14 @@ namespace sim
 
     void SimulatorBoard::startSelfTest()
     {
+        if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "midi-audit"
+            || juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("startup"))
+        { startMidiAuditTest(); return; }
+        if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("midi-learn"))
+        {
+            startMidiLearnTest();
+            return;
+        }
         if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}).startsWith("panel"))
         {
             startPanelTest();
@@ -1510,6 +1520,10 @@ namespace sim
 
     SimulatorBoard::~SimulatorBoard()
     {
+        mt::MTMidiDeviceManager::simulatorInputFilter = {};
+        midiDevicesConnection.disconnect();
+        midiOverlay.reset();
+        midiLearn.reset(); // release held controls while panel/engine still exist
         ShiftLatch::onChange = nullptr;
         juce::Desktop::getInstance().removeGlobalMouseListener( &mouseTrace );
         // KickHome is a process-wide singleton: detach it, don't let it be destroyed with the board.
@@ -1614,6 +1628,7 @@ namespace sim
 
     void SimulatorBoard::resized()
     {
+        if(midiOverlay) midiOverlay->setBounds(getLocalBounds());
         screen.setTransform({});
         if(hardwareLayout)
         {
@@ -1687,6 +1702,25 @@ namespace sim
         addAndMakeVisible( board );
         addAndMakeVisible(hardwareButton);
         addAndMakeVisible(originalButton);
+        addAndMakeVisible(learnButton);
+        addAndMakeVisible(midiButton);
+        addAndMakeVisible(midiStatus);
+        setWantsKeyboardFocus(true);
+        midiStatus.setFont(juce::Font(13.f));
+        midiStatus.setColour(juce::Label::textColourId, palette::text);
+        midiStatus.setInterceptsMouseClicks(false, false);
+        board.onMidiChanged = [this] {
+            learnButton.setLed(board.midi().isLearning());
+            midiButton.setLed(board.midi().isEnabled() && board.midi().mappingCount() > 0);
+            midiStatus.setText(board.midi().getStatus(), juce::dontSendNotification);
+            midiStatus.setTooltip(board.midi().getStatus());
+            if(board.midi().isLearning() && isShowing()) grabKeyboardFocus();
+        };
+        learnButton.onPress = [this](bool down) { if(!down) board.midi().setLearning(!board.midi().isLearning()); };
+        midiButton.onPress = [this](bool down) { if(!down) board.midi().showMenu(&midiButton); };
+        learnButton.setTooltip("Toggle MIDI learn: click a panel control, then move your controller. Esc cancels.");
+        midiButton.setTooltip("View/remove MIDI mappings, bypass mappings or release held controls");
+        board.onMidiChanged();
         hardwareButton.onPress = [this](bool down) { if(!down) setHardwareLayout(true); };
         originalButton.onPress = [this](bool down) { if(!down) setHardwareLayout(false); };
         hardwareButton.setTooltip("Use the hardware panel layout");
@@ -1698,6 +1732,15 @@ namespace sim
         setHardwareLayout(hardware, false);
         const auto size = preferredSize();
         setSize(size.x, size.y);
+    }
+
+    Simulator::~Simulator() { board.onMidiChanged = {}; }
+
+    bool Simulator::keyPressed(const juce::KeyPress& key)
+    {
+        if(key == juce::KeyPress::escapeKey && board.midi().isLearning())
+        { board.midi().setLearning(false); return true; }
+        return false;
     }
 
     juce::Point<int> Simulator::preferredSize() const
@@ -1728,13 +1771,18 @@ namespace sim
         g.fillRect(0, 0, getWidth(), toolbarHeight);
         g.setColour(palette::text);
         g.setFont(juce::Font(14.f, juce::Font::bold));
-        g.drawText("KICK SIMULATOR", 14, 0, juce::jmax(0, getWidth() - 264), toolbarHeight, juce::Justification::centredLeft);
+        if(getWidth() >= 650) g.drawText("KICK SIMULATOR", 14, 0, getWidth() - 496, 44, juce::Justification::centredLeft);
     }
 
     void Simulator::resized()
     {
-        hardwareButton.setBounds(getWidth() - 246, 7, 112, 30);
-        originalButton.setBounds(getWidth() - 126, 7, 112, 30);
+        const int buttonWidth = juce::jmin(112, (getWidth() - 38) / 4);
+        const int left = getWidth() - 14 - (buttonWidth * 4 + 24);
+        learnButton.setBounds(left, 7, buttonWidth, 30);
+        midiButton.setBounds(left + buttonWidth + 8, 7, buttonWidth, 30);
+        hardwareButton.setBounds(left + (buttonWidth + 8) * 2, 7, buttonWidth, 30);
+        originalButton.setBounds(left + (buttonWidth + 8) * 3, 7, buttonWidth, 30);
+        midiStatus.setBounds(10, 42, getWidth() - 20, 30);
         const float bw = (float)board.getWidth(), bh = (float)board.getHeight();
         const float availableHeight = (float)juce::jmax(1, getHeight() - toolbarHeight);
         const float scale = juce::jmax(0.01f, juce::jmin(getWidth() / bw, availableHeight / bh));

@@ -4,6 +4,7 @@
 #include "kick_SimulatorControls.h"
 #include "kick_SimulatorMainControl.h"
 #include "kick_PanelArtwork.h"
+#include "kick_MidiLearn.h"
 
 namespace sim
 {
@@ -25,6 +26,8 @@ namespace sim
         void resized() override;
         void setHardwareLayout(bool enabled);
         bool isHardwareLayout() const { return hardwareLayout; }
+        MidiLearn& midi() { return *midiLearn; }
+        std::function<void()> onMidiChanged;
 
     private:
         /// Packets the app sent to the "hardware" (LEDs, pads, slider).
@@ -52,6 +55,9 @@ namespace sim
         /// through its controls and the Q-links, undo, and snapshot each step.
         void startModularTest();
         void startPanelTest();
+        void startMidiLearnTest();
+        void startMidiAuditTest();
+        void setupMidiLearn(const std::vector<SimButton*>& buttons);
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };
@@ -84,6 +90,9 @@ namespace sim
 
         std::multimap<int, SimButton*> ledMap; // BtnLedSequence id -> button(s)
         sigslot::scoped_connection     outputConnection;
+        sigslot::scoped_connection     midiDevicesConnection;
+        std::unique_ptr<MidiLearn> midiLearn;
+        std::unique_ptr<juce::Component> midiOverlay;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( SimulatorBoard )
     };
@@ -95,19 +104,24 @@ namespace sim
     {
     public:
         Simulator();
+        ~Simulator() override;
         void paint( juce::Graphics& g ) override;
         void resized() override;
         void setHardwareLayout(bool enabled, bool persist = true);
         bool isHardwareLayout() const { return board.isHardwareLayout(); }
         juce::Point<int> preferredSize() const;
         std::function<void()> onLayoutChanged;
+        bool keyPressed(const juce::KeyPress& key) override;
 
     private:
         SimulatorBoard board;
         SimButton hardwareButton { "HARDWARE", DCC::EN_INVALID_ID };
         SimButton originalButton { "ORIGINAL", DCC::EN_INVALID_ID };
+        SimButton learnButton { "MIDI LEARN", DCC::EN_INVALID_ID };
+        SimButton midiButton { "MIDI", DCC::EN_INVALID_ID };
+        juce::Label midiStatus;
         juce::TooltipWindow tooltips { this, 650 };
-        static constexpr int toolbarHeight = 44;
+        static constexpr int toolbarHeight = 76;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( Simulator )
     };
 }
